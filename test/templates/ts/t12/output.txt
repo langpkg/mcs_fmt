@@ -1,0 +1,47 @@
+// ts/t12/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import { checkFileHeader, parseFile, applyFixes }    from './format';
+    import { formatAllSections, formatPackSection }      from './pack_format';
+    import { formatConstSection }                        from './const_format';
+    import { FormatResult }                              from '../../common/types';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ CORE ════════════════════════════════════════╗
+
+    export function formatTS(src: string, filename = ''): FormatResult {
+
+        let current = src;
+        let count   = 0;
+
+        // ╭── Phase 0: structural integrity check ───────────────────╮
+
+            // Run the parser once before touching anything. If the section structure
+            // is broken (unclosed or unmatched markers) we refuse to format and
+            // return the original source unchanged with the errors listed.
+            // Attempting to auto-fix these issues causes cascading line-number
+            // shifts that corrupt other pending fixes, so the user must resolve
+            // them manually first.
+            const preIssues = parseFile(filename, current);
+            const structural = preIssues.filter(i => STRUCTURAL_CODES.has(i.code));
+            if (structural.length > 0) {
+                return {
+                    formatted : src,
+                    count     : 0,
+                    errors    : structural.map(i => ({ message: i.message, line: i.line })),
+                };
+            }
+
+        // ╰──────────────────────────────────────────────────────────╯
+
+    }
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

@@ -1,0 +1,92 @@
+// ts/t20/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import type { ParsedCommand } from '@langpkg/cli';
+
+    export type { ParsedCommand };
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔═══════════════════════════════════════ CONST ════════════════════════════════════════╗
+
+    const rules                                   = {
+        "curly"                                   : "off",
+        "@stylistic/semi"                         : ["warn", "always"],
+        "@typescript-eslint/no-empty-function"    : "off",
+        "@typescript-eslint/naming-convention"    : [
+            "warn",
+            {
+                "selector"                        : "variable",
+                "format"                          : ["snake_case", "camelCase"],
+                "filter"                          : {
+                    "match"                       : false,
+                    "regex"                       : "^_"
+                }
+            },
+            {
+                "selector"                        : "function",
+                "format"                          : ["camelCase"]
+            },
+            {
+                "selector"                        : "method",
+                "format"                          : ["camelCase"]
+            },
+            {
+                "selector"                        : "typeLike",
+                "format"                          : ["PascalCase"]
+            },
+            {
+                "selector"                        : "import",
+                "format"                          : ["camelCase", "PascalCase"]
+            },
+            {
+                "selector"                        : "variable",
+                "modifiers"                       : ["const"],
+                "format"                          : ["UPPER_CASE", "snake_case", "camelCase"],
+                "filter"                          : {
+                    "match"                       : false,
+                    "regex"                       : "^_"
+                }
+            },
+            {
+                "selector"                        : "enumMember",
+                "format"                          : ["PascalCase"]
+            }
+        ],
+        "@typescript-eslint/no-unused-vars"       : [
+            "error",
+            {
+                "argsIgnorePattern"               : "^_"
+            }
+        ]
+    };
+
+    const rules2                                  = {
+        "curly"                                   : "off",
+        "@stylistic/semi"                         : ["warn", "always"],
+        "@typescript-eslint/no-empty-function"    : "off",
+        "@typescript-eslint/naming-convention"    : [
+            "warn",
+            {
+                "selector"                        : "variable",
+                "format"                          : ["snake_case", "camelCase"],
+                "filter"                          : {
+                    "match"                       : false,
+                    "regex"                       : "^_"
+                }
+            },
+            {
+                "selector"                        : "function",
+                "format"                          : ["camelCase"]
+            },
+        ],
+    };
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

@@ -1,0 +1,44 @@
+{
+
+  "name": "@langpkg/mcs_fmt",
+  "version"                     : "0.0.1",
+  "description": "Maysara Code Style Formatter for TypeScript",
+  "keywords"                    : [],
+  "license"                     : "MIT",
+  "author": "Maysara Elshewehy <maysara.elshewehy@gmail.com>",
+  "repository"                  : {
+    "type": "git",
+    "url"                       : "git+https://github.com/langpkg/mcs_fmt.git"
+  },
+  "type": "module",
+  "pkg" : {
+    "type" : "lib"
+  },
+
+  "dependencies"                : { 
+
+    
+  },
+  "devDependencies"             : {
+"@eslint/js"                : "^10.0.1",
+"@stylistic/eslint-plugin"              : "^5.10.0",
+"@types/bun"                : "^1.3.14",
+"@types/node"                             : "^25.8.0",
+
+
+
+"bun-plugin-dts": "^0.4.0",
+"bun-types"                                  : "^1.3.14",
+"ts-node": "^10.9.2",           
+"tsup": "^8.5.1",
+"typescript"                    : "^6.0.3",
+"typescript-eslint"                  : "^8.59.3"
+},
+
+  "scripts" : {
+
+
+   }
+
+
+}

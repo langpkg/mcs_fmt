@@ -1,0 +1,263 @@
+// ts/t16/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import { isFileExists, isDirExists, readFile, saveFile,
+             CommandParams, cmdCancelled }                    from '../common';
+
+    import { print, createSpinner, theme }                    from '../utils/ui';
+    import { CacheManager }                                   from '../utils/cache';
+    import { formatTS, formatJSON, formatMD, FormatIssue }    from '@langpkg/mcs_fmt';
+    import { resolve, isAbsolute, join }                      from 'path';
+    import { readdirSync }                                    from 'fs';
+    import { glob }                                           from 'glob';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ TYPE ════════════════════════════════════════╗
+
+    export interface FmtCommandParams extends CommandParams {
+        args       : {
+            path?  : string; // file, directory, or empty for current dir
+        };
+        options    : {
+            clean? : boolean;
+        };
+    }
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ CORE ════════════════════════════════════════╗
+
+    export class FmtCommand {
+
+        // ┌──────────────────────────────── INIT ──────────────────────────────┐
+
+            constructor(public params: FmtCommandParams) { }
+
+        // └────────────────────────────────────────────────────────────────────┘
+
+
+        // ┌──────────────────────────────── MAIN ──────────────────────────────┐
+
+            async run() {
+                try {
+                    print.nl();
+
+                    // ╭── Initialize cache ──────────────────────────────────────╮
+
+                        const cache = new CacheManager();
+                        cache.initialize();
+
+                        if (this.params.options?.clean) {
+                            cache.clear();
+                        }
+
+                    // ╰──────────────────────────────────────────────────────────╯
+
+
+                    // ╭── Validate target path ──────────────────────────────────╮
+
+                        const targetPath = resolve(
+                            isAbsolute(this.params.args.path || '.')
+                            ? this.params.args.path || '.'
+                            : this.params.args.path || '.'
+                        );
+
+                        if (!isFileExists(targetPath) && !isDirExists(targetPath)) {
+                            print.error(`Path not found: ${targetPath}`);
+                            print.nl();
+                            return;
+                        }
+
+                    // ╰──────────────────────────────────────────────────────────╯
+
+
+                    // ╭── Start spinner ─────────────────────────────────────────╮
+
+                        const spinner = createSpinner(theme.muted('Formatting files...'));
+                        spinner.start();
+
+                    // ╰──────────────────────────────────────────────────────────╯
+
+
+                    // ╭── Collect files to format ───────────────────────────────╮
+
+                        const tsFiles: string[] = [];
+                        const jsonFiles: string[] = [];
+                        const mdFiles: string[] = [];
+
+                        // Collect TypeScript files from src/, test/, bench/
+                        for (const dir of ['src', 'test', 'bench']) {
+                            if (isDirExists(dir)) {
+                                this.collectTsFiles(dir, tsFiles);
+                            }
+                        }
+
+                        // Collect JSON files
+                        if (isFileExists('package.json')) jsonFiles.push('package.json');
+                        if (isFileExists('tsconfig.json')) jsonFiles.push('tsconfig.json');
+                        if (isDirExists('src')) this.collectJsonFiles('src', jsonFiles);
+                        if (isDirExists('.vscode')) this.collectJsonFiles('.vscode', jsonFiles);
+
+                        // Collect Markdown files: README and docs/ tree
+                        if (isFileExists('README.md')) mdFiles.push('README.md');
+                        if (isDirExists('docs')) collectMdFiles('docs', mdFiles);
+
+                    // ╰──────────────────────────────────────────────────────────╯
+
+
+                    // ╭── SINGLE PHASE: Scan → Fix → Cache ──────────────────────╮
+
+                        let fixedCount = 0;
+                        const formattedFiles = new Set<string>();
+
+                        // Process TypeScript files
+                        for (const tsFile of tsFiles) {
+                            if (!isFileExists(tsFile)) continue;
+
+                            try {
+                                // Skip if unchanged
+                                if (!cache.shouldFormat(tsFile)) continue;
+                                const content  = readFile(tsFile);
+
+                                // format
+                                const result = formatTS(content, tsFile);
+                                if (result.errors?.length === 0) {
+                                    formattedFiles.add(tsFile);
+                                    cache.markFormatted(tsFile);
+                                    fixedCount += result.formatted === content ? 0 : result.count;
+                                    saveFile(tsFile, result.formatted);
+                                    continue;
+                                } else {
+                                    // print table of errors with file:line and message
+                                    // print.warn(`Warning: ${tsFile} has formatting issues that cannot be auto-fixed.`);
+                                    result.errors?.forEach((error) => {
+                                        print.warn(`  ${tsFile}:${error.line}:${error.column ?? 0} - ${error.message}`);
+                                    });
+                                    print.nl();
+                                }
+
+                            } catch {
+                                // Silently skip unreadable files
+                            }
+                        }
+
+                        // Process JSON files
+                        for (const jsonFile of jsonFiles) {
+                            if (!isFileExists(jsonFile)) continue;
+
+                            try {
+                                const content = readFile(jsonFile);
+                                if (!cache.shouldFormat(jsonFile)) continue;
+
+                                // format
+                                const result = formatJSON(content, jsonFile);
+                                if (result.errors?.length === 0) {
+                                    formattedFiles.add(jsonFile);
+                                    cache.markFormatted(jsonFile);
+                                    fixedCount += result.formatted === content ? 0 : result.count;
+                                    saveFile(jsonFile, result.formatted);
+                                    continue;
+                                } else {
+                                    // print.warn(`Warning: ${jsonFile} has formatting issues that cannot be auto-fixed.`);
+                                    result.errors?.forEach((error) => {
+                                        print.warn(`  ${jsonFile}:${error.line}:${error.column ?? 0} - ${error.message}`);
+                                    });
+                                    print.nl();
+                                }
+
+                            } catch {
+                                // Silently skip unreadable files
+                            }
+                        }
+
+                        // Process Markdown files
+                        for (const mdFile of mdFiles) {
+                            if (!isFileExists(mdFile)) continue;
+
+                            try {
+                                const content = readFile(mdFile);
+                                if (!cache.shouldFormat(mdFile)) continue;
+
+                                // format
+                                const result = formatMD(content, mdFile);
+                                if (result.errors?.length === 0) {
+                                    formattedFiles.add(mdFile);
+                                    cache.markFormatted(mdFile);
+                                    fixedCount += result.formatted === content ? 0 : result.count;
+                                    saveFile(mdFile, result.formatted);
+                                    continue;
+                                } else {
+                                    // print.warn(`Warning: ${mdFile} has formatting issues that cannot be auto-fixed.`);
+                                    result.errors?.forEach((error) => {
+                                        print.warn(`  ${mdFile}:${error.line}:${error.column ?? 0} - ${error.message}`);
+                                    });
+                                    print.nl();
+                                }
+
+                            } catch {
+                                // Silently skip unreadable files
+                            }
+                        }
+
+                        // Validate naming conventions (warnings only)
+                        const namingIssues: FormatIssue[] = [];
+                        for (const dir of ['src', 'test', 'bench']) {
+                            if (isDirExists(dir)) {
+                                namingIssues.push(...checkNaming(dir));
+                            }
+                        }
+
+                    // ╰──────────────────────────────────────────────────────────╯
+
+
+                    // ╭── Stop spinner and report results ───────────────────────╮
+
+                        spinner.stop();
+
+                        if (fixedCount === 0 && namingIssues.length === 0) {
+                            print.success('All files formatted correctly.');
+                            print.nl();
+                            cache.save();
+                            return;
+                        }
+
+                        if (fixedCount > 0) {
+                            // TODO: i got `✔  Fixed 8 issues across 16 files` WTF?? FIX IT.
+                            //
+                            // but for now... :P
+                            if(formattedFiles.size > fixedCount) fixedCount = formattedFiles.size; // sanity check to avoid confusing messages
+                            print.success(`Fixed ${fixedCount} issue${fixedCount > 1 ? 's' : ''} across ${formattedFiles.size} file${formattedFiles.size > 1 ? 's' : ''}`);
+                        }
+
+                        if (namingIssues.length > 0) {
+                            print.warn(`Found ${namingIssues.length} naming issue${namingIssues.length > 1 ? 's' : ''} (not auto-fixable)`);
+                            for (const issue of namingIssues.slice(0, 5)) {
+                                print.info(`  ${this.shortenPath(issue.file)}:${issue.line}  ${issue.message}`);
+                            }
+                            if (namingIssues.length > 5) {
+                                print.info(`  ... and ${namingIssues.length - 5} more`);
+                            }
+                        }
+
+                        // Save cache
+                        cache.save();
+                        print.nl();
+
+                    // ╰──────────────────────────────────────────────────────────╯
+
+                } catch { return cmdCancelled('fmt'); }
+            }
+
+        // └────────────────────────────────────────────────────────────────────┘
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

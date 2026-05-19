@@ -1,0 +1,38 @@
+// ts/t8/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ CORE ════════════════════════════════════════╗
+
+    // this have 1 blank line after opening curly brace, by user.
+    // so we keep it, and add 1 blank line after the last statement, before closing curly brace, to make it consistent. (if not)
+    function x1() {
+
+        var a = 0;
+
+    }
+
+    // this dont have blank line after opening curly brace, by user.
+    // but it have 1 blank line after the last statement, before closing curly brace, by user.
+    // so we remove the blank line before closing curly brace, to make it consistent with the opening curly brace.
+    function x2() {
+        var a = 0;
+    }
+
+    // this have 1 blank line after opening curly brace, and 1 blank line before closing curly brace, by user.
+    // so we keep it as is, since its consistent.
+    function x3() {
+
+        var a = 0;
+
+    }
+
+    // this dont have blank line after or before the curly braces, by user.
+    // so we keep it as is, since its consistent.
+    function x4() {
+        var a = 0;
+    }
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

@@ -1,0 +1,52 @@
+// ts/t6/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import { readFile, writeFile }    from '../../common';
+    import { glob }                   from 'glob';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ CORE ════════════════════════════════════════╗
+
+    // ┌─────────────────────────────── HEADER ─────────────────────────────┐
+
+        // Expected file header structure:
+        export function checkFileHeader(filepath: string, srcRoot: string, content: string): FormatIssue[] {
+
+            // ╭── l3:a ──────────────────────────────────────────────────╮
+
+                let startIdx = 0;
+
+            // ╰──────────────────────────────────────────────────────────╯
+
+
+            // ╭── l3:b ──────────────────────────────────────────────────╮
+
+                // all consecutive "//" lines from startIdx
+
+                let headerEnd = startIdx; // exclusive: first line that is NOT part of the header
+
+                {
+                    while (headerEnd < lines.length && (lines[headerEnd] ?? '').startsWith('//')) {
+                        headerEnd++;
+                    }
+                }
+
+                const headerLen   = headerEnd - startIdx; // number of "//" lines found
+
+                return issues;
+
+            // ╰──────────────────────────────────────────────────────────╯
+
+        }
+
+    // └────────────────────────────────────────────────────────────────────┘
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

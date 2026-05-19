@@ -1,0 +1,67 @@
+// ts/t11/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import { formatJSON } from '@langpkg/mcs_fmt';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ MAIN ════════════════════════════════════════╗
+
+    export function generateVscodeSettings(): string {
+
+        const settings = {
+
+            'files.exclude'                 : {
+                '**/.git'                   : true,
+                '**/.svn'                   : true,
+                '**/.hg'                    : true,
+                '**/.DS_Store'              : true,
+                '**/Thumbs.db'              : true,
+                'eslint.config.mjs'         : true,
+                'bun.lock'                  : true,
+                'package-lock.json'         : true,
+                'LICENSE'                   : true,
+                '.gitignore'                : true,
+                '.gitattributes'            : true,
+                '.npmignore'                : true,
+                'node_modules'              : true,
+                'tsup.config.ts'            : true,
+                'tsconfig.json'             : true,
+            },
+
+            'hide-files.files': [
+                'eslint.config.mjs',
+                '.pkg',
+                '.vscode',
+                'bun.lock',
+                'package-lock.json',
+                'LICENSE',
+                '.gitignore',
+                '.gitattributes',
+                '.npmignore',
+                'node_modules',
+                'tsup.config.ts',
+                'tsconfig.json',
+            ],
+
+        };
+
+        const result = formatJSON(JSON.stringify(settings), '.vscode/settings.json');
+
+        if(result.errors?.length) {
+            console.error('Error formatting vscode settings:', JSON.stringify(result.errors, null, 2));
+            throw new Error('Failed to generate vscode settings due to formatting errors.');
+        }
+
+        return result.formatted + '\n';
+
+    }
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

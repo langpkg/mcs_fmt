@@ -1,0 +1,241 @@
+// eslint.config.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import { defineConfig } from 'eslint/config';
+    import stylistic from '@stylistic/eslint-plugin';
+    import tseslint from 'typescript-eslint';
+    import js from '@eslint/js';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔═══════════════════════════════════════ CONST ════════════════════════════════════════╗
+
+    const rules2 = {
+        "curly"                                         : "off",
+        "@stylistic/semi"  : ["warn", "always"],
+        "@typescript-eslint/no-empty-function"           : "off",
+        "@typescript-eslint/naming-convention"          : [
+            "warn",
+            {
+                "selector" : "variable",
+                "format" : ["snake_case", "camelCase"],
+                "filter" : {
+                    "match"                                      : false,
+                    "regex"                                   : "^_"
+                }
+            },
+            {
+            "selector": "function",
+                "format": ["camelCase"]
+            },
+        ],
+    };
+
+    // ── Key ordering templates ────────────────────────────────────────────────────────
+
+    const PACKAGE_JSON_ORDER                 = [
+        'name',
+        'version',
+        'description',
+        'keywords',
+        'license',
+        'homepage',
+        'bugs',
+        'author',
+        'repository',
+        'type',
+        'main',
+        'types',
+        'bin',
+        'files',
+        'exports',
+        'engines',
+        'pkg', // Custom pkg field for @langpkg/pkg projects
+        'peerDependencies',
+        'dependencies',
+        'devDependencies',
+        'scripts',
+    ];
+
+    const TSCONFIG_JSON_ORDER                = [
+        'extends',
+        'compilerOptions',
+        'include',
+        'exclude',
+        'files',
+        'references',
+    ];
+
+    // Key ordering for compilerOptions inside tsconfig.json
+    const TSCONFIG_COMPILER_OPTIONS_ORDER    = [
+        // Project
+        'incremental',
+        'composite',
+        'tsBuildInfoFile',
+        'disableSourceOfProjectReferenceRedirect',
+        'disableSolutionSearching',
+        'disableReferencedProjectLoad',
+        // Language and Environment
+        'target',
+        'lib',
+        'jsx',
+        'jsxFactory',
+        'jsxFragmentFactory',
+        'jsxImportSource',
+        'reactNamespace',
+        'noLib',
+        'useDefineForClassFields',
+        'moduleDetection',
+        // Modules
+        'module',
+        'rootDir',
+        'moduleResolution',
+        'baseUrl',
+        'paths',
+        'rootDirs',
+        'typeRoots',
+        'types',
+        'allowUmdGlobalAccess',
+        'moduleSuffixes',
+        'allowImportingTsExtensions',
+        'resolvePackageJsonExports',
+        'resolvePackageJsonImports',
+        'customConditions',
+        'resolveJsonModule',
+        'allowArbitraryExtensions',
+        'noResolve',
+        // JavaScript Support
+        'allowJs',
+        'checkJs',
+        'maxNodeModuleJsDepth',
+        // Emit
+        'declaration',
+        'declarationMap',
+        'emitDeclarationOnly',
+        'sourceMap',
+        'inlineSourceMap',
+        'outFile',
+        'outDir',
+        'removeComments',
+        'noEmit',
+        'importHelpers',
+        'importsNotUsedAsValues',
+        'downlevelIteration',
+        'sourceRoot',
+        'mapRoot',
+        'inlineSources',
+        'emitBOM',
+        'newLine',
+        'stripInternal',
+        'noEmitHelpers',
+        'noEmitOnError',
+        'preserveConstEnums',
+        'declarationDir',
+        'verbatimModuleSyntax',
+        // Interop Constraints
+        'isolatedModules',
+        'allowSyntheticDefaultImports',
+        'esModuleInterop',
+        'preserveSymlinks',
+        'forceConsistentCasingInFileNames',
+        // Type Checking
+        'strict',
+        'noImplicitAny',
+        'strictNullChecks',
+        'strictFunctionTypes',
+        'strictBindCallApply',
+        'strictPropertyInitialization',
+        'noImplicitThis',
+        'useUnknownInCatchVariables',
+        'alwaysStrict',
+        'noUnusedLocals',
+        'noUnusedParameters',
+        'exactOptionalPropertyTypes',
+        'noImplicitReturns',
+        'noFallthroughCasesInSwitch',
+        'noUncheckedIndexedAccess',
+        'noImplicitOverride',
+        'noPropertyAccessFromIndexSignature',
+        'allowUnusedLabels',
+        'allowUnreachableCode',
+        // Completeness
+        'skipDefaultLibCheck',
+        'skipLibCheck',
+    ];
+
+    // ── Group boundaries (blank-line separators between logical sections) ─────────────
+    //
+    // Rules:
+    //   - Every JSON object always gets a blank line after "{" and before "}".
+    //   - When groups are defined, an additional blank line is placed between each group.
+    //   - Files with no template use an empty group array → no intra-group separators,
+    //     but still get the open/close blank lines and alphabetical key ordering.
+
+    const PACKAGE_JSON_GROUPS: string[][] = [
+        [ 'name', 'version', 'description', 'keywords', 'license', 'type', 'author' ],
+        [ 'homepage', 'bugs', 'repository' ],
+        [ 'main', 'types', 'module', 'exports', 'bin', 'files', 'engines' ],
+        [ 'pkg' ],
+        [ 'scripts' ],
+        [ 'peerDependencies', 'dependencies', 'devDependencies' ],
+    ];
+
+    const TSCONFIG_JSON_GROUPS: string[][] = [
+        ['extends'],
+        ['compilerOptions'],
+        ['include', 'exclude', 'files', 'references'],
+    ];
+
+    // Sentinel: every JSON file gets at least open/close blank lines.
+    // Pass GENERIC_GROUPS (empty array) for files with no specific template.
+    const GENERIC_GROUPS: string[][] = [];
+
+    // ── Per-file template registry ────────────────────────────────────────────────────
+    //
+    // Maps basename → { order, groups, nestedGroups? }
+    // nestedGroups maps a key name → { order, groups } applied when formatting that
+    // key's value as a nested object.
+
+    const FILE_TEMPLATES: Record<string, xxx> = {
+        'package.json': {
+            order  : PACKAGE_JSON_ORDER,
+            groups : PACKAGE_JSON_GROUPS,
+        },
+        'tsconfig.json': {
+            order  : TSCONFIG_JSON_ORDER,
+            groups : TSCONFIG_JSON_GROUPS,
+            nested : {
+                compilerOptions: {
+                    order  : TSCONFIG_COMPILER_OPTIONS_ORDER,
+                    groups : TSCONFIG_COMPILER_OPTIONS_GROUPS,
+                },
+            },
+        },
+    };
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ CONF ════════════════════════════════════════╗
+
+    export default defineConfig(
+
+        js.configs.recommended, ...tseslint.configs.recommended, ...tseslint.configs.stylistic,
+
+        {
+            ignores     : ['**/.vscode-test', '**/out', 'dist/', 'node_modules/', '.git/'],
+            plugins     : { '@stylistic': stylistic },
+            rules       : rules
+        }
+    );
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+

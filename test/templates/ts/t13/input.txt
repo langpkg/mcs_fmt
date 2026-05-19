@@ -1,0 +1,76 @@
+// src/core/common/types.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import type { ParsedCommand } from '@langpkg/cli';
+
+    export type { ParsedCommand };
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ TYPE ════════════════════════════════════════╗
+
+    export type ProjectType = 'pkg' | 'cli';
+
+    export interface ProjectMeta {
+        name                   : string;
+        version: string;
+        description         : string;
+        license                  : string;
+        author: {
+            name: string;
+            email       :           string;
+            github: string;
+        };
+        org     : string; // GitHub org or username
+        repoName        :        string; // GitHub repo name
+    }
+
+    // Sensible blank defaults used when no meta is provided (e.g. heal --fix)
+    export const DEFAULT_META: ProjectMeta = {
+        name : 'my-package',
+        version          : '0.0.1',
+        description         : 'A TypeScript project',
+        license         : 'MIT',
+        author : { name: '', email: '', github: '' },
+        org             : '',
+        repoName : 'my-package',
+    };
+
+    export class PkgError extends Error {
+        constructor(
+            msg : string,
+            public code         : string,
+            public ctx?         : Record<string, unknown>
+        ) {
+            super(msg);
+            this.name   = 'PkgError';
+        }
+    }
+
+    // Base interface that extends ParsedCommand
+    export interface CommandParams extends ParsedCommand {
+        args : ParsedCommand['args'];
+        options             : ParsedCommand['options'];
+        dynamicArgs     ? : string[];
+        dynamicOptionsxxxxxxxxxxxxxxxxxxxxxxxxxxx      ?: Record<string, string | boolean>;
+    }
+
+    export interface InitCommandParams extends CommandParams {
+        args: ParsedCommand['args'] & {
+            name? : string;
+        };
+        options         :        ParsedCommand['options'] & {
+            type?: string;
+            desc       ?: string;
+            pm       ?         : string;
+        };
+    }
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

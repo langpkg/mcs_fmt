@@ -1,0 +1,174 @@
+// ts/t19/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import type { ParsedCommand } from '@langpkg/cli';
+
+    export type { ParsedCommand };
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ TYPE ════════════════════════════════════════╗
+
+    export type ProjectType = 'pkg' | 'cli';
+
+    export interface ProjectMeta {
+        name            : string;
+        version         : string;
+        description     : string;
+        license         : string;
+        author          : {
+            name        : string;
+            email       : string;
+            github      : string;
+        };
+        org             : string; // GitHub org or username
+        repoName        : string; // GitHub repo name
+    }
+
+    // Sensible blank defaults used when no meta is provided (e.g. heal --fix)
+    export const DEFAULT_META: ProjectMeta = {
+        name            : 'my-package',
+        version         : '0.0.1',
+        description     : 'A TypeScript project',
+        license         : 'MIT',
+        author          : { name: '', email: '', github: '' },
+        org             : '',
+        repoName        : 'my-package',
+    };
+
+    export class PkgError extends Error {
+        constructor(
+            msg         : string,
+            public code : string,
+            public ctx? : Record<string, unknown>
+        ) {
+            super(msg);
+            this.name   = 'PkgError';
+        }
+    }
+
+    // Base interface that extends ParsedCommand
+    export interface CommandParams extends ParsedCommand {
+        args            : ParsedCommand['args'];
+        options         : ParsedCommand['options'];
+        dynamicArgs?    : string[];
+        dynamicOptions? : Record<string, string | boolean>;
+    }
+
+    export interface InitCommandParams extends CommandParams {
+        args            : ParsedCommand['args'] & {
+            name?       : string;
+        };
+        options         : ParsedCommand['options'] & {
+            type?       : string;
+            desc?       : string;
+            pm?         : string;
+        };
+    }
+
+    export interface FormatIssue {
+        file            : string;
+        line            : number;
+        code            : string;
+        message         : string;
+        severity        : IssueSeverity;
+        fixable         : boolean;
+        fix?            :
+                        | { type: 'replace_line'; line: number; content: string }
+                        | { type: 'replace_lines'; startLine: number; endLine: number; content: string }
+                        | { type: 'prepend_lines'; content: string }
+                        | { type: 'append_lines'; content: string }
+                        | { type: 'insert_after_line'; line: number; content: string }
+                        | { type: 'insert_before_line'; line: number; content: string }
+                        | { type: 'remove_blank_lines'; line: number; count: number };
+    }
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔═══════════════════════════════════════ CONST ════════════════════════════════════════╗
+
+    const x: boolean                              = true;
+
+    const rules                                   = {
+        "curly"                                   : "off",
+        "@stylistic/semi"                         : ["warn", "always"],
+        "@typescript-eslint/no-empty-function"    : "off",
+        "@typescript-eslint/naming-convention"    : [
+            "warn",
+            {
+                "selector"                        : "variable",
+                "format"                          : ["snake_case", "camelCase"],
+                "filter"                          : {
+                    "match"                       : false,
+                    "regex"                       : "^_"
+                }
+            },
+            {
+                "selector"                        : "function",
+                "format"                          : ["camelCase"]
+            },
+            {
+                "selector"                        : "method",
+                "format"                          : ["camelCase"]
+            },
+            {
+                "selector"                        : "typeLike",
+                "format"                          : ["PascalCase"]
+            },
+            {
+                "selector"                        : "import",
+                "format"                          : ["camelCase", "PascalCase"]
+            },
+            {
+                "selector"                        : "variable",
+                "modifiers"                       : ["const"],
+                "format"                          : ["UPPER_CASE", "snake_case", "camelCase"],
+                "filter"                          : {
+                    "match"                       : false,
+                    "regex"                       : "^_"
+                }
+            },
+            {
+                "selector"                        : "enumMember",
+                "format"                          : ["PascalCase"]
+            }
+        ],
+        "@typescript-eslint/no-unused-vars"       : [
+            "error",
+            {
+                "argsIgnorePattern"               : "^_"
+            }
+        ]
+    };
+
+    const rules2                                  = {
+        "curly"                                   : "off",
+        "@stylistic/semi"                         : ["warn", "always"],
+        "@typescript-eslint/no-empty-function"    : "off",
+        "@typescript-eslint/naming-convention"    : [
+            "warn",
+            {
+                "selector"                        : "variable",
+                "format"                          : ["snake_case", "camelCase"],
+                "filter"                          : {
+                    "match"                       : false,
+                    "regex"                       : "^_"
+                }
+            },
+            {
+                "selector"                        : "function",
+                "format"                          : ["camelCase"]
+            },
+        ],
+    };
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
