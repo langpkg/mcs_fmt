@@ -29,9 +29,10 @@
 
 - ## Quick Start 🔥
 
+    > Install [pkg](https://github.com/langpkg/pkg) first.
+
     ```bash
-    # install via bun
-    bun i @langpkg/mcs_fmt
+    pkg i @langpkg/mcs_fmt
     ```
 
     > **This is not the final version (I’m not providing any guarantees here).**
