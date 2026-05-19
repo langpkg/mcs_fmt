@@ -21,7 +21,11 @@
         "format"       : ["esm", "cjs"],
         "minify"       : true,
         "sourcemap"    : false,
-        "splitting"    : true
+        "splitting"    : false,
+        "treeshake"    : true,
+        "external"     : ['bun'],
+        "target"       : 'es2022',
+        "outDir"       : 'dist',
     };
 
 // ╚══════════════════════════════════════════════════════════════════════════════════════╝
