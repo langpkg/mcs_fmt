@@ -4,6 +4,10 @@ test/
 *.test.ts
 *.tsbuildinfo
 
+# Build and package artifacts
+.pkg/
+assets/
+
 # Configuration files
 tsconfig.json
 eslint.config.mjs

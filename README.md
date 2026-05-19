@@ -11,7 +11,7 @@
     <p align="center" style="font-style:italic; color:gray;">
         ----------------<br>
     </p>
-    <img data="version" src="https://img.shields.io/badge/v-0.0.2-black"/>
+    <img data="version" src="https://img.shields.io/badge/v-0.0.3-black"/>
     <a href="https://github.com/langpkg/pkg"><img src="https://img.shields.io/badge/part of-langpkg/pkg-black"/></a>
     <br>
     <img src="https://img.shields.io/badge/coverage-~%25-brightgreen" alt="Test Coverage" />
