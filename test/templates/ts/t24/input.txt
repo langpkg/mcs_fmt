@@ -1,0 +1,14 @@
+// ts/t24/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+import { createRule, buildPrattTable, pratt, error, Result as R, type Rules, type Result, type Parser }                                                                                                                                          from '@langpkg/parser';
+import { Node }                                                                                                                                                 from '../mod/ast';
+import type { Expr, Span, BinaryOp, AssignOp, UnaryOp, TypeExpr, IdentNode, FieldNode, MatchArmNode, MatchPattern, BlockStmtNode, StringLitNode, ParamNode }                                                                                                                                       from '../mod/ast';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+

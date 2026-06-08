@@ -166,14 +166,14 @@
         }
 
         /** Length of `    role kindPrefix specifiers` - the prefix before padding+from */
-        function specifierLen(e: ParsedEntry): number {
-            const kindPrefix = e.kind === 'type' ? 'type ' : '';
+        function specifierLen(e: ParsedEntry, bracePad = 0): number {
+            const kindPrefix = e.kind === 'type' ? 'type ' : ' '.repeat(bracePad);
             return (INDENT + e.role + ' ' + kindPrefix + e.specifiers).length;
         }
 
         /** Total single-line length with given fromCol */
-        function singleLineLen(e: ParsedEntry, fromCol: number): number {
-            return Math.max(specifierLen(e) + MIN_GAP, fromCol) + 'from '.length + e.source.length + 1;
+        function singleLineLen(e: ParsedEntry, fromCol: number, bracePad = 0): number {
+            return Math.max(specifierLen(e, bracePad) + MIN_GAP, fromCol) + 'from '.length + e.source.length + 1;
         }
 
         /**
@@ -183,8 +183,8 @@
         * This mirrors renderEntry's break logic exactly, making fromCol convergence
         * work correctly.
         */
-        function simulateWrapLastLen(e: ParsedEntry, fromCol: number): number {
-            const kindPrefix = e.kind === 'type' ? 'type ' : '';
+        function simulateWrapLastLen(e: ParsedEntry, fromCol: number, bracePad = 0): number {
+            const kindPrefix = e.kind === 'type' ? 'type ' : ' '.repeat(bracePad);
             const keyword    = `${e.role} ${kindPrefix}`;
             const braceCol   = INDENT.length + keyword.length;
             const contIndent = ' '.repeat(braceCol);
@@ -217,15 +217,15 @@
         * → fewer breaks → longer last line), we iterate until convergence.
         * In practice 2-3 passes always suffice.
         */
-        function computeGlobalFromCol(singleEntries: ParsedEntry[], wrappedEntries: ParsedEntry[]): number {
+        function computeGlobalFromCol(singleEntries: ParsedEntry[], wrappedEntries: ParsedEntry[], bracePad = 0): number {
             // Baseline: maximum single-line prefix length
-            let fromCol = singleEntries.reduce((m, e) => Math.max(m, specifierLen(e)), 0) + MIN_GAP;
+            let fromCol = singleEntries.reduce((m, e) => Math.max(m, specifierLen(e, bracePad)), 0) + MIN_GAP;
 
             for (let pass = 0; pass < 8; pass++) {
                 let maxNeeded = fromCol;
 
                 for (const e of wrappedEntries) {
-                    const lastLen = simulateWrapLastLen(e, fromCol);
+                    const lastLen = simulateWrapLastLen(e, fromCol, bracePad);
                     maxNeeded = Math.max(maxNeeded, lastLen + MIN_GAP);
                 }
 
@@ -250,39 +250,44 @@
         * fromCol is computed GLOBALLY across all groups using convergence so that
         * `from` aligns at the same column for every line (single and multi-line).
         */
-        function groupEntries(entries: ParsedEntry[]): { groups: ParsedEntry[][], fromCol: number } {
+        function groupEntries(entries: ParsedEntry[]): { groups: ParsedEntry[][], fromCol: number, bracePad: number } {
             // Determine which named entries will wrap.
             // Use only non-star entries' specifier lengths for the provisional fromCol -
             // entries whose specifiers alone exceed MAX_LINE are obviously wrapping and
             // must not inflate the column used to decide whether others wrap too.
+            const hasType = entries.some(e => e.kind === 'type');
+            const bracePad = hasType ? 5 : 0; // 'type '.length to align {
             const MAX_SPEC = MAX_LINE - MIN_GAP - 'from '.length - 2; // rough upper bound
             const provisionalFromCol = entries
-            .filter(e => specifierLen(e) <= MAX_SPEC)
-            .reduce((m, e) => Math.max(m, specifierLen(e)), 0) + MIN_GAP;
+            .filter(e => specifierLen(e, bracePad) <= MAX_SPEC)
+            .reduce((m, e) => Math.max(m, specifierLen(e, bracePad)), 0) + MIN_GAP;
             const willWrap = (e: ParsedEntry) =>
-            e.kind === 'named' && singleLineLen(e, provisionalFromCol) > MAX_LINE;
+            (e.kind === 'named' || e.kind === 'type') && singleLineLen(e, provisionalFromCol, bracePad) > MAX_LINE;
 
             function buildGroups(list: ParsedEntry[]): ParsedEntry[][] {
                 const named = list.filter(e => e.kind === 'named');
                 const star  = list.filter(e => e.kind === 'star');
                 const type  = list.filter(e => e.kind === 'type');
 
-                const namedWrap   = named.filter(willWrap).sort((a, b) => specifierLen(b) - specifierLen(a));
+                const namedWrap   = named.filter(willWrap).sort((a, b) => specifierLen(b, bracePad) - specifierLen(a, bracePad));
                 const namedSingle = named.filter(e => !willWrap(e));
 
                 const namedRel = namedSingle
                 .filter(e =>  isRelativePath(e.source))
-                .sort((a, b) => specifierLen(b) - specifierLen(a));
+                .sort((a, b) => specifierLen(b, bracePad) - specifierLen(a, bracePad));
 
                 const namedPkg = [...namedSingle.filter(e => !isRelativePath(e.source)), ...star]
-                .sort((a, b) => specifierLen(b) - specifierLen(a));
+                .sort((a, b) => specifierLen(b, bracePad) - specifierLen(a, bracePad));
 
-                const typeSorted = [...type].sort((a, b) => specifierLen(b) - specifierLen(a));
+                const typeWrap  = type.filter(willWrap).sort((a, b) => specifierLen(b, bracePad) - specifierLen(a, bracePad));
+                const typeSingle = type.filter(e => !willWrap(e));
+                const typeSorted = [...typeSingle].sort((a, b) => specifierLen(b, bracePad) - specifierLen(a, bracePad));
 
                 const groups: ParsedEntry[][] = [];
                 for (const e of namedWrap) groups.push([e]);  // each wrapped alone
                 if (namedRel.length > 0)    groups.push(namedRel);
                 if (namedPkg.length > 0)    groups.push(namedPkg);
+                for (const e of typeWrap)   groups.push([e]);  // each wrapped alone
                 if (typeSorted.length > 0)  groups.push(typeSorted);
                 return groups;
             }
@@ -294,9 +299,9 @@
             // Compute global fromCol with convergence
             const wrappedEntries = entries.filter(willWrap);
             const singleEntries  = entries.filter(e => !willWrap(e));
-            const fromCol = computeGlobalFromCol(singleEntries, wrappedEntries);
+            const fromCol = computeGlobalFromCol(singleEntries, wrappedEntries, bracePad);
 
-            return { groups: allGroups, fromCol };
+            return { groups: allGroups, fromCol, bracePad };
         }
 
     // └────────────────────────────────────────────────────────────────────┘
@@ -316,7 +321,7 @@
         *
         * All entries share the same global fromCol so `from` aligns vertically.
         */
-        function renderEntry(entry: ParsedEntry, fromCol: number): string[] {
+        function renderEntry(entry: ParsedEntry, fromCol: number, bracePad = 0): string[] {
             const kw = entry.role;
 
             // ── Star / default ──────────────────────────────────────────
@@ -327,7 +332,7 @@
             }
 
             // ── Named / type ────────────────────────────────────────────
-            const kindPrefix = entry.kind === 'type' ? 'type ' : '';
+            const kindPrefix = entry.kind === 'type' ? 'type ' : ' '.repeat(bracePad);
             const keyword    = `${kw} ${kindPrefix}`;
 
             const singlePrefix  = `${INDENT}${keyword}${entry.specifiers}`;
@@ -366,8 +371,8 @@
         }
 
         /** Returns true when an entry renders as more than one line at the given fromCol. */
-        function isMultiLine(entry: ParsedEntry, fromCol: number): boolean {
-            return renderEntry(entry, fromCol).length > 1;
+        function isMultiLine(entry: ParsedEntry, fromCol: number, bracePad = 0): boolean {
+            return renderEntry(entry, fromCol, bracePad).length > 1;
         }
 
         /**
@@ -376,16 +381,16 @@
         * any entry in group[g-1] OR any entry in group[g] wraps to multiple lines.
         * Adjacent single-line-only groups are kept together with no blank line between.
         */
-        function renderGroups(groups: ParsedEntry[][], fromCol: number): string[] {
+        function renderGroups(groups: ParsedEntry[][], fromCol: number, bracePad = 0): string[] {
             const result: string[] = [];
             for (let g = 0; g < groups.length; g++) {
                 if (g > 0) {
-                    const prevHasWrap = groups[g - 1].some(e => isMultiLine(e, fromCol));
-                    const currHasWrap = groups[g].some(e => isMultiLine(e, fromCol));
+                    const prevHasWrap = groups[g - 1].some(e => isMultiLine(e, fromCol, bracePad));
+                    const currHasWrap = groups[g].some(e => isMultiLine(e, fromCol, bracePad));
                     if (prevHasWrap || currHasWrap) result.push('');
                 }
                 for (const entry of groups[g]) {
-                    result.push(...renderEntry(entry, fromCol));
+                    result.push(...renderEntry(entry, fromCol, bracePad));
                 }
             }
             return result;
@@ -446,8 +451,8 @@
                 return result;
             }
 
-            const { groups, fromCol } = groupEntries(entries);
-            const result = renderGroups(groups, fromCol);
+            const { groups, fromCol, bracePad } = groupEntries(entries);
+            const result = renderGroups(groups, fromCol, bracePad);
 
             if (otherLines.length > 0) {
                 result.push('');

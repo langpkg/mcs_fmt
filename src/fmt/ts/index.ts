@@ -67,7 +67,7 @@
             // Fix one issue at a time: each fix shifts line numbers, so re-scan from
             // scratch after every applied fix until no fixable issues remain.
             // Cap iterations to prevent timeout on very large files.
-            let itr = Math.min(current.split('\n').length * 2, 500);
+            let itr = Math.min(current.split('\n').length * 4, 3000);
             while (itr-- > 0) {
                 const issues = [
                     ...(filename ? checkFileHeader(filename, srcDir, current) : []),

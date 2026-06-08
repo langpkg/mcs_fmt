@@ -1,0 +1,649 @@
+// ts/t25/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import { createRule,
+             buildPrattTable,
+             pratt,
+             error,
+             Result as R,
+             type Rules,
+             type Result,
+             type Parser }                                                                                                                                          from '@langpkg/parser';
+
+    import { Node }                                                                                                                                                 from '../mod/ast';
+
+    import type { Expr,
+                  Span,
+                  BinaryOp,
+                  AssignOp,
+                  UnaryOp,
+                  TypeExpr,
+                  IdentNode,
+                  FieldNode,
+                  MatchArmNode,
+                  MatchPattern,
+                  BlockStmtNode,
+                  StringLitNode,
+                  ParamNode }                                                                                                                                       from '../mod/ast';
+
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ RULE ════════════════════════════════════════╗
+
+    const SKIP = new Set(['ws', 'comment', 'doc_comment', 'hash_comment',
+        'section', 'section_end', 'subsection', 'subsection_end',
+        'subsection_level3', 'subsection_level3_end']);
+
+    // ─────────────────────────────────────────────────────────────────────────────────
+    // Pratt table
+    // ─────────────────────────────────────────────────────────────────────────────────
+
+    const PRATT = buildPrattTable({
+
+        // ── Prefix ──────────────────────────────────────────────────
+
+        prefix: {
+
+            // Integer literals
+            dec     : { bp: 0, parse: (_, tok) => intLit(tok, 'dec') },
+            hex     : { bp: 0, parse: (_, tok) => intLit(tok, 'hex') },
+            oct     : { bp: 0, parse: (_, tok) => intLit(tok, 'oct') },
+            bin     : { bp: 0, parse: (_, tok) => intLit(tok, 'bin') },
+            flt     : { bp: 0, parse: (_, tok) => exprR(Node.floatLit(tok.span, parseFloat(tok.text!.replace(/_/g, '')), tok.text!), tok.span) },
+
+            // String / char
+            str          : { bp: 0, parse: (_, tok) => exprR(Node.stringLit(tok.span, tok.text!), tok.span) },
+            multiline_str: { bp: 0, parse: (_, tok) => exprR(Node.stringLit(tok.span, tok.text!), tok.span) },
+            char         : { bp: 0, parse: (_, tok) => exprR(Node.charLit(tok.span, tok.text!), tok.span) },
+
+            // Boolean / null
+            true    : { bp: 0, parse: (_, tok) => exprR(Node.boolLit(tok.span, true),  tok.span) },
+            false   : { bp: 0, parse: (_, tok) => exprR(Node.boolLit(tok.span, false), tok.span) },
+            null    : { bp: 0, parse: (_, tok) => exprR(Node.nullLit(tok.span), tok.span) },
+
+            // Identifier — peek for tagged object (PascalCase Name { ... })
+            ident: {
+                bp: 0, parse: (p, tok) => {
+                    const name = tok.text!;
+                    const id   = Node.ident(tok.span, name);
+
+                    skipTrivia(p);
+
+                    // Labeled block expression: label: { ... }
+                    if (peek(p, ':')) {
+                        const savedIdx = p.index;
+                        p.index++; // consume ':'
+                        skipTrivia(p);
+                        if (peek(p, '{')) {
+                            p.index++; // consume '{'
+                            const block = parseBlockBody(p, tok.span);
+                            return exprR(Node.labeledBlockExpr(
+                                merge(tok.span, block.span), id, block), merge(tok.span, block.span));
+                            }
+                            // Not a labeled block — backtrack
+                            p.index = savedIdx;
+                        }
+
+                        // Tagged object  Name { key: val }  (PascalCase convention)
+                        const first = name[0] ?? '';
+                        if (first >= 'A' && first <= 'Z' && peek(p, '{')) {
+                            p.index++; // consume '{'
+                            return parseTaggedObject(p, tok, id);
+                        }
+
+                        return exprR(id, tok.span);
+                    },
+                },
+
+                // Type keywords usable as expressions (e.g. targets of sizeof / typeof)
+                i_type      : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, tok.text!), tok.span) },
+                u_type      : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, tok.text!), tok.span) },
+                f_type      : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, tok.text!), tok.span) },
+                bool        : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, 'bool'),  tok.span) },
+                void        : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, 'void'),  tok.span) },
+                any         : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, 'any'),   tok.span) },
+                type_kw     : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, 'type'),  tok.span) },
+
+                // this / super
+                this_kw     : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, 'this'),  tok.span) },
+                super_kw    : { bp: 0, parse: (_, tok) => exprR(Node.ident(tok.span, 'super'), tok.span) },
+
+                // @builtin  |  @builtin(args)  |  @import("./path")
+                '@': {
+                    bp: 0, parse: (p, tok) => {
+                        skipTrivia(p);
+                        if (p.index >= p.tokens.length) return fail(tok.span);
+                        const nameTok = p.tokens[p.index];
+                        if (nameTok.type !== 'ident') return fail(tok.span);
+                        p.index++;
+                        const args: Expr[] = [];
+                        skipTrivia(p);
+                        if (peek(p, '(')) {
+                            p.index++; // consume '('
+                            parseArgList(p, args, ')');
+                        }
+                        const span = merge(tok.span, args.length
+                        ? (args[args.length - 1] as any).span : nameTok.span);
+                        return exprR(Node.builtinCall(span, nameTok.text!, args), span);
+                    },
+                },
+
+                // .{a, b}  tuple literal  |  .Variant  |  .Variant { fields }
+                '.': {
+                    bp: 0, parse: (p, tok) => {
+                        skipTrivia(p);
+                        // .{a, b} → tuple literal
+                        if (peek(p, '{')) {
+                            p.index++;
+                            const elems: Expr[] = [];
+                            skipTrivia(p);
+                            while (!peek(p, '}') && p.index < p.tokens.length) {
+                                const r = prattExpr(p, 0);
+                                if (!r.isPassed()) break;
+                                elems.push(getExpr(r));
+                                skipTrivia(p);
+                                if (peek(p, ',')) { p.index++; skipTrivia(p); } else break;
+                            }
+                            const close = consume(p, '}');
+                            const span  = merge(tok.span, close?.span ?? tok.span);
+                            return exprR(Node.tupleLit(span, elems), span);
+                        }
+                        // .Variant  |  .Variant { fields }
+                        if (p.index < p.tokens.length && p.tokens[p.index].type === 'ident') {
+                            const vTok = p.tokens[p.index++];
+                            const span = merge(tok.span, vTok.span);
+                            skipTrivia(p);
+                            // .Variant { fields } — tagged variant construction
+                            if (peek(p, '{')) {
+                                p.index++;
+                                const fields: FieldNode[] = [];
+                                parseFieldList(p, fields);
+                                const close = consume(p, '}');
+                                const s = merge(tok.span, close?.span ?? vTok.span);
+                                const variantNode = Node.enumVariantLit(
+                                    merge(tok.span, vTok.span), vTok.text!);
+                                    return exprR(Node.taggedObject(s, variantNode, fields), s);
+                                }
+                                return exprR(Node.enumVariantLit(span, vTok.text!), span);
+                            }
+                            return fail(tok.span);
+                        },
+                    },
+
+                    // Array literal  [e, ...]
+                    '[': {
+                        bp: 0, parse: (p, tok) => {
+                            const elems: Expr[] = [];
+                            skipTrivia(p);
+                            while (!peek(p, ']') && p.index < p.tokens.length) {
+                                const r = prattExpr(p, 0);
+                                if (!r.isPassed()) break;
+                                elems.push(getExpr(r));
+                                skipTrivia(p);
+                                if (peek(p, ',')) { p.index++; skipTrivia(p); } else break;
+                            }
+                            const close = consume(p, ']');
+                            const span  = merge(tok.span, close?.span ?? tok.span);
+                            return exprR(Node.arrayLit(span, elems), span);
+                        },
+                    },
+
+                    // Grouped expr  (expr)
+                    '(': {
+                        bp: 0, parse: (p, tok) => {
+                            skipTrivia(p);
+                            if (peek(p, ')')) {
+                                const close = p.tokens[p.index++];
+                                return exprR(Node.tupleLit(merge(tok.span, close.span), []),
+                                merge(tok.span, close.span));
+                            }
+                            const first = prattExpr(p, 0);
+                            if (!first.isPassed()) return fail(tok.span);
+                            skipTrivia(p);
+                            if (peek(p, ')')) {
+                                const close = p.tokens[p.index++];
+                                return exprR(Node.parenExpr(merge(tok.span, close.span), getExpr(first)),
+                                merge(tok.span, close.span));
+                            }
+                            // (a, b) is not a tuple — tuples use .{a, b}
+                            if (peek(p, ',')) {
+                                return fail(tok.span);
+                            }
+                            return first;
+                        },
+                    },
+
+                    // Prefix operators
+                    '-'     : { bp: 75, parse: (p, tok) => prefix(p, tok, '-') },
+                    '+'     : { bp: 75, parse: (p, tok) => prefix(p, tok, '+') },
+                    '!'     : { bp: 75, parse: (p, tok) => prefix(p, tok, '!') },
+                    not     : { bp: 75, parse: (p, tok) => prefix(p, tok, '!') },
+                    '~'     : { bp: 75, parse: (p, tok) => prefix(p, tok, '~') },
+                    '&'     : { bp: 75, parse: (p, tok) => prefix(p, tok, '&') },
+                    '++'    : { bp: 75, parse: (p, tok) => prefix(p, tok, '++pre') },
+                    '--'    : { bp: 75, parse: (p, tok) => prefix(p, tok, '--pre') },
+                    try     : { bp: 74, parse: (p, tok) => prefix(p, tok, 'try') },
+
+                    // Exit statements as expressions
+                    return: { bp: 1, parse: (p, tok) => {
+                            const r = prattExpr(p, 1);
+                            const val = r.isPassed() ? getExpr(r) : null;
+                            const span = merge(tok.span, val ? (val as any).span : tok.span);
+                            return exprR(Node.returnStmt(span, val), span);
+                    }},
+                    fail: { bp: 1, parse: (p, tok) => {
+                            const r = prattExpr(p, 1);
+                            const val = r.isPassed() ? getExpr(r) : null;
+                            const span = merge(tok.span, val ? (val as any).span : tok.span);
+                            return exprR(Node.failStmt(span, val), span);
+                    }},
+                    break: { bp: 1, parse: (p, tok) => {
+                            skipTrivia(p);
+                            let label: IdentNode | null = null;
+                            if (p.index < p.tokens.length && p.tokens[p.index].type === 'ident') {
+                                const lt = p.tokens[p.index++];
+                                label = Node.ident(lt.span, lt.text!);
+                            }
+                            skipTrivia(p);
+                            let value: Expr | null = null;
+                            if (p.index < p.tokens.length && p.tokens[p.index].type !== ';'
+                            && p.tokens[p.index].type !== '}' && p.tokens[p.index].type !== ',') {
+                                const r = prattExpr(p, 1);
+                                if (r.isPassed()) value = getExpr(r);
+                            }
+                            const endSpan = value ? (value as any).span : label ? label.span : tok.span;
+                            const span = merge(tok.span, endSpan);
+                            return exprR(Node.breakStmt(span, label, value), span);
+                    }},
+                    continue: { bp: 1, parse: (p, tok) => {
+                            skipTrivia(p);
+                            let label: IdentNode | null = null;
+                            if (p.index < p.tokens.length && p.tokens[p.index].type === 'ident') {
+                                const lt = p.tokens[p.index++];
+                                label = Node.ident(lt.span, lt.text!);
+                            }
+                            const span = merge(tok.span, label ? label.span : tok.span);
+                            return exprR(Node.continueStmt(span, label), span);
+                    }},
+                    unreachable: { bp: 1, parse: (_, tok) => exprR(Node.unreachableStmt(tok.span), tok.span) },
+
+                    // sizeof / typeof / maxof / minof / alignof
+                    sizeof  : { bp: 0, parse: (p, tok) => intrinsic(p, tok, 'sizeof') },
+                    typeof  : { bp: 0, parse: (p, tok) => intrinsic(p, tok, 'typeof') },
+                    maxof   : { bp: 0, parse: (p, tok) => intrinsic(p, tok, 'maxof')  },
+                    minof   : { bp: 0, parse: (p, tok) => intrinsic(p, tok, 'minof')  },
+                    alignof : { bp: 0, parse: (p, tok) => intrinsic(p, tok, 'alignof')},
+
+                    // if expr  (both statement and expression form)
+                    if: {
+                        bp: 0, parse: (p, tok) => {
+                            const cond = prattExpr(p, 0);
+                            if (!cond.isPassed()) return fail(tok.span);
+                            const then = parseBlock(p);
+                            if (!then) return fail(tok.span);
+                            let else_: BlockStmtNode | import('../mod/ast').IfExprNode | null = null;
+                            const savedIdx = p.index;
+                            skipTrivia(p);
+                            if (peekType(p, 'else')) {
+                                p.index++;
+                                skipTrivia(p);
+                                if (peekType(p, 'if')) {
+                                    const r = prattExpr(p, 0);
+                                    else_ = r.isPassed() ? getExpr(r) as any : null;
+                                } else {
+                                    else_ = parseBlock(p);
+                                }
+                            } else {
+                                p.index = savedIdx;
+                            }
+                            const end  = (else_ as any)?.span?.end ?? then.span.end;
+                            const span = merge(tok.span, { start: end, end });
+                            return exprR(Node.ifExpr(span, getExpr(cond), then, else_, false), span);
+                        },
+                    },
+
+                    // match expr { arms }
+                    match: {
+                        bp: 0, parse: (p, tok) => parseMatchExpr(p, tok, false),
+                    },
+
+                    // comptime if / comptime match
+                    comptime: {
+                        bp: 0, parse: (p, tok) => {
+                            skipTrivia(p);
+                            if (p.index >= p.tokens.length) return fail(tok.span);
+                            const next = p.tokens[p.index];
+                            if (next.type === 'if') {
+                                p.index++;
+                                const cond = prattExpr(p, 0);
+                                if (!cond.isPassed()) return fail(tok.span);
+                                const then = parseBlock(p);
+                                if (!then) return fail(tok.span);
+                                let else_: BlockStmtNode | import('../mod/ast').IfExprNode | null = null;
+                                const saved = p.index; skipTrivia(p);
+                                if (peekType(p, 'else')) {
+                                    p.index++;
+                                    skipTrivia(p);
+                                    if (peekType(p, 'if')) {
+                                        const r = prattExpr(p, 0);
+                                        else_ = r.isPassed() ? getExpr(r) as any : null;
+                                    } else {
+                                        else_ = parseBlock(p);
+                                    }
+                                } else p.index = saved;
+                                const end  = (else_ as any)?.span?.end ?? then.span.end;
+                                const span = merge(tok.span, { start: end, end });
+                                return exprR(Node.ifExpr(span, getExpr(cond), then, else_, true), span);
+                            }
+                            if (next.type === 'match') {
+                                p.index++;
+                                return parseMatchExpr(p, tok, true);
+                            }
+                            return fail(tok.span);
+                        },
+                    },
+
+                    // test "label" { }  — expression form
+                    test: {
+                        bp: 0, parse: (p, tok) => {
+                            let label: StringLitNode | null = null;
+                            skipTrivia(p);
+                            if (peekType(p, 'str')) {
+                                const lt = p.tokens[p.index++];
+                                label = Node.stringLit(lt.span, lt.text!);
+                            }
+                            const body = parseBlock(p);
+                            if (!body) return fail(tok.span);
+                            const span = merge(tok.span, body.span);
+                            return exprR(Node.testStmt(span, body, label) as unknown as Expr, span);
+                        },
+                    },
+
+                    // bench "label" { }  — expression form
+                    bench: {
+                        bp: 0, parse: (p, tok) => {
+                            let label: StringLitNode | null = null;
+                            skipTrivia(p);
+                            if (peekType(p, 'str')) {
+                                const lt = p.tokens[p.index++];
+                                label = Node.stringLit(lt.span, lt.text!);
+                            }
+                            const body = parseBlock(p);
+                            if (!body) return fail(tok.span);
+                            const span = merge(tok.span, body.span);
+                            return exprR(Node.benchStmt(span, body, label) as unknown as Expr, span);
+                        },
+                    },
+
+                },
+
+        // ── Infix ───────────────────────────────────────────────────
+
+                infix: {
+
+                    // Postfix  ++  --
+                    '++': { lbp: 80, parse: (_, l, tok) => {
+                            const span = merge(l.span, tok.span);
+                            return exprR(Node.postfix(span, '++', getExpr(l)), span);
+                    }},
+                    '--': { lbp: 80, parse: (_, l, tok) => {
+                            const span = merge(l.span, tok.span);
+                            return exprR(Node.postfix(span, '--', getExpr(l)), span);
+                    }},
+
+                    // Dereference  .*
+                    '.*': { lbp: 80, parse: (_, l, tok) => {
+                            const span = merge(l.span, tok.span);
+                            return exprR(Node.deref(span, getExpr(l)), span);
+                    }},
+
+                    // Member access  .field  |  method call  .method(args)
+                    '.': { lbp: 80, parse: (p, l, tok) => {
+                            skipTrivia(p);
+                            if (p.index >= p.tokens.length) return fail(tok.span);
+                            const prop = p.tokens[p.index];
+                            if (prop.type !== 'ident') return fail(tok.span);
+                            p.index++;
+                            skipTrivia(p);
+                            if (peek(p, '(')) {
+                                p.index++;
+                                const args: Expr[] = [];
+                                parseArgList(p, args, ')');
+                                const span = merge(l.span, args.length
+                                ? (args[args.length - 1] as any).span : prop.span);
+                                return exprR(Node.methodCall(span, getExpr(l),
+                                Node.ident(prop.span, prop.text!), args, false), span);
+                            }
+                            const span = merge(l.span, prop.span);
+                            return exprR(Node.member(span, getExpr(l),
+                            Node.ident(prop.span, prop.text!), false), span);
+                    }},
+
+                    // Optional chain  ?.field  |  ?.method(args)
+                    '?.': { lbp: 80, parse: (p, l, tok) => {
+                            skipTrivia(p);
+                            if (p.index >= p.tokens.length) return fail(tok.span);
+                            const prop = p.tokens[p.index++];
+                            skipTrivia(p);
+                            if (peek(p, '(')) {
+                                p.index++;
+                                const args: Expr[] = [];
+                                parseArgList(p, args, ')');
+                                const span = merge(l.span, args.length
+                                ? (args[args.length - 1] as any).span : prop.span);
+                                return exprR(Node.methodCall(span, getExpr(l),
+                                Node.ident(prop.span, prop.text!), args, true), span);
+                            }
+                            const span = merge(l.span, prop.span);
+                            return exprR(Node.member(span, getExpr(l),
+                            Node.ident(prop.span, prop.text!), true), span);
+                    }},
+
+                    // Index  [expr]  |  slices handled by range infix inside the index
+                    '[': { lbp: 80, parse: (p, l, tok) => {
+                            skipTrivia(p);
+                            // Check for open-ended slice: arr[2..]
+                            if (peek(p, '..')) {
+                                p.index++;
+                                const close = consume(p, ']');
+                                const span  = merge(l.span, close?.span ?? tok.span);
+                                const zeroSpan = { start: tok.span.start, end: tok.span.start };
+                                const from  = Node.intLit(zeroSpan, 2n, '2', 'dec'); // placeholder replaced by semantic pass
+                                // represent as index with special open-range marker
+                                return exprR(Node.index(span, getExpr(l),
+                                Node.binary(tok.span, '..', from, Node.nullLit(tok.span))), span);
+                            }
+                            const idx  = prattExpr(p, 0);
+                            if (!idx.isPassed()) return fail(tok.span);
+                            skipTrivia(p);
+                            // Subslice  arr[a..b]  |  arr[a..=b]
+                            if (peek(p, '..') || peek(p, '..=')) {
+                                const rangeTok  = p.tokens[p.index++];
+                                const inclusive = rangeTok.type === '..=';
+                                skipTrivia(p);
+                                let to: Expr;
+                                if (peek(p, ']')) {
+                                    // open-ended arr[a..]
+                                    to = Node.nullLit(rangeTok.span);
+                                } else {
+                                    const rhs = prattExpr(p, 0);
+                                    if (!rhs.isPassed()) return fail(tok.span);
+                                    to = getExpr(rhs);
+                                }
+                                const close = consume(p, ']');
+                                const span  = merge(l.span, close?.span ?? tok.span);
+                                return exprR(Node.slice(span, getExpr(l), getExpr(idx), to, inclusive), span);
+                            }
+                            const close = consume(p, ']');
+                            const span  = merge(l.span, close?.span ?? tok.span);
+                            return exprR(Node.index(span, getExpr(l), getExpr(idx)), span);
+                    }},
+
+                    // Call  (args)
+                    '(': { lbp: 80, parse: (p, l, tok) => {
+                            const args: Expr[] = [];
+                            parseArgList(p, args, ')');
+                            const span = merge(l.span, args.length
+                            ? (args[args.length - 1] as any).span : tok.span);
+                            return exprR(Node.call(span, getExpr(l), args), span);
+                    }},
+
+                    // Power  **  (right-assoc)
+                    '**': { lbp: 70, rbp: 69, parse: (p, l, tok) => {
+                            const r = prattExpr(p, 69);
+                            if (!r.isPassed()) return fail(tok.span);
+                            const span = merge(l.span, r.span);
+                            return exprR(Node.binary(span, '**', getExpr(l), getExpr(r)), span);
+                    }},
+
+                    // Multiplicative
+                    '*'  : { lbp: 60, parse: (p, l, t) => bin(p, l, t, '*'  ) },
+                    '/'  : { lbp: 60, parse: (p, l, t) => bin(p, l, t, '/'  ) },
+                    '%'  : { lbp: 60, parse: (p, l, t) => bin(p, l, t, '%'  ) },
+                    '*%' : { lbp: 60, parse: (p, l, t) => bin(p, l, t, '*%' ) },
+                    '*|' : { lbp: 60, parse: (p, l, t) => bin(p, l, t, '*|' ) },
+                    '*?' : { lbp: 60, parse: (p, l, t) => bin(p, l, t, '*?' ) },
+
+                    // Additive
+                    '+'  : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '+'  ) },
+                    '-'  : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '-'  ) },
+                    '+%' : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '+%' ) },
+                    '-%' : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '-%' ) },
+                    '+|' : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '+|' ) },
+                    '-|' : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '-|' ) },
+                    '+?' : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '+?' ) },
+                    '-?' : { lbp: 50, parse: (p, l, t) => bin(p, l, t, '-?' ) },
+
+                    // Shift
+                    '<<' : { lbp: 45, parse: (p, l, t) => bin(p, l, t, '<<' ) },
+                    '>>' : { lbp: 45, parse: (p, l, t) => bin(p, l, t, '>>' ) },
+
+                    // Relational
+                    '<'  : { lbp: 40, parse: (p, l, t) => bin(p, l, t, '<'  ) },
+                    '>'  : { lbp: 40, parse: (p, l, t) => bin(p, l, t, '>'  ) },
+                    '<=' : { lbp: 40, parse: (p, l, t) => bin(p, l, t, '<=' ) },
+                    '>=' : { lbp: 40, parse: (p, l, t) => bin(p, l, t, '>=' ) },
+
+                    // Equality
+                    '==' : { lbp: 35, parse: (p, l, t) => bin(p, l, t, '==' ) },
+                    '!=' : { lbp: 35, parse: (p, l, t) => bin(p, l, t, '!=' ) },
+
+                    // Bitwise
+                    '&'  : { lbp: 30, parse: (p, l, t) => bin(p, l, t, '&'  ) },
+                    '^'  : { lbp: 29, parse: (p, l, t) => bin(p, l, t, '^'  ) },
+                    '|'  : { lbp: 28, parse: (p, l, t) => bin(p, l, t, '|'  ) },
+
+                    // Logical
+                    '&&' : { lbp: 25, parse: (p, l, t) => bin(p, l, t, '&&' ) },
+                    '||' : { lbp: 20, parse: (p, l, t) => bin(p, l, t, '||' ) },
+                    and  : { lbp: 25, parse: (p, l, t) => bin(p, l, t, '&&' ) },
+                    or   : { lbp: 20, parse: (p, l, t) => bin(p, l, t, '||' ) },
+
+                    // Range
+                    '..'  : { lbp: 15, parse: (p, l, t) => bin(p, l, t, '..' ) },
+                    '..=' : { lbp: 15, parse: (p, l, t) => bin(p, l, t, '..=') },
+
+                    // Pipe  |>  (left-assoc)
+                    '|>': { lbp: 14, parse: (p, l, tok) => {
+                            const r = prattExpr(p, 14);
+                            if (!r.isPassed()) return fail(tok.span);
+                            const span = merge(l.span, r.span);
+                            return exprR(Node.pipe(span, getExpr(l), getExpr(r)), span);
+                    }},
+
+                    // Orelse  ??  |  orelse
+                    '??'   : { lbp: 12, parse: (p, l, tok) => orelse(p, l, tok) },
+                    orelse : { lbp: 12, parse: (p, l, tok) => orelse(p, l, tok) },
+
+                    // Ternary  cond ? then : else
+                    '?': { lbp: 10, parse: (p, l, tok) => {
+                            const then_ = prattExpr(p, 0);
+                            if (!then_.isPassed()) return fail(tok.span);
+                            skipTrivia(p);
+                            consume(p, ':');
+                            const else_ = prattExpr(p, 0);
+                            if (!else_.isPassed()) return fail(tok.span);
+                            const span = merge(l.span, else_.span);
+                            return exprR(Node.ternary(span, getExpr(l), getExpr(then_), getExpr(else_)), span);
+                    }},
+
+                    // Catch  expr catch e { handler }
+                    catch: { lbp: 8, parse: (p, l, tok) => {
+                            let binding: IdentNode | null = null;
+                            skipTrivia(p);
+                            if (p.index < p.tokens.length && p.tokens[p.index].type === 'ident') {
+                                const bt = p.tokens[p.index++];
+                                binding = Node.ident(bt.span, bt.text!);
+                            }
+                            const handlerBlock = parseBlock(p);
+                            const handler: Expr | BlockStmtNode | null = handlerBlock ?? (() => {
+                                const r = prattExpr(p, 7);
+                                return r.isPassed() ? getExpr(r) : null;
+                            })();
+                            if (!handler) return fail(tok.span);
+                            const span = merge(l.span, (handler as any).span ?? tok.span);
+                            return exprR(Node.catchExpr(span, getExpr(l), binding, handler), span);
+                    }},
+
+                    // As  expr as Type
+                    as: { lbp: 6, parse: (p, l, tok) => {
+                            skipTrivia(p);
+                            if (p.index >= p.tokens.length) return fail(tok.span);
+                            const typeNode = parseTypeToken(p);
+                            if (!typeNode) return fail(tok.span);
+                            const span = merge(l.span, typeNode.span);
+                            return exprR(Node.asExpr(span, getExpr(l), typeNode), span);
+                    }},
+
+                    // Assign  =  +=  -=  …
+                    '='   : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '='   ) },
+                    '+='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '+='  ) },
+                    '-='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '-='  ) },
+                    '*='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '*='  ) },
+                    '/='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '/='  ) },
+                    '%='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '%='  ) },
+                    '**=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '**=' ) },
+                    '<<=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '<<=' ) },
+                    '>>=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '>>=' ) },
+                    '&='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '&='  ) },
+                    '|='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '|='  ) },
+                    '^='  : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '^='  ) },
+                    '+%=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '+%=' ) },
+                    '-%=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '-%=' ) },
+                    '*%=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '*%=' ) },
+                    '+|=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '+|=' ) },
+                    '-|=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '-|=' ) },
+                    '*|=' : { lbp: 2, rbp: 1, parse: (p, l, t) => assign(p, l, t, '*|=' ) },
+
+                },
+
+            });
+
+            // ─────────────────────────────────────────────────────────────────────────────────
+            // Export
+            // ─────────────────────────────────────────────────────────────────────────────────
+
+            export const exprRules: Rules = [
+                createRule('Expr',
+                pratt(PRATT),
+                {
+                    build: (data) => {
+                        const inner = data.isPratt()
+                        ? data.getPrattResult()?.[0]
+                        : data.getCustomData();
+                        return mkCustom(data, 'expr', inner ?? data);
+                    },
+                    errors: [error(() => true, 'Expected expression')],
+                }),
+            ];
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

@@ -1376,25 +1376,23 @@
                     // Expected indentation: section indent + 4 (minimum) + 4 per nesting level.
                     //
                     // braceDepth      - { [ } ] scope depth (string-stripped).
-                    // parenScopeDepth - multi-line ( … ) scope depth tracked separately:
-                    //   `const push = (`    → opensParenScope → parenScopeDepth+1
-                    //   `) =>`              → closesParenScope → depth-1 before indent check
-                    //   `function foo(`     → isFunctionDecl  → NOT a paren scope
-                    //   `): string {`       → leading ) but parenScopeDepth=0 → ignored
-                    //   inline `(x, y)`     → open+close on same line → net 0
+                    // parenScopeDepth - multi-line (…) scope depth. Opens when a line ends
+                    //   with `(` (value-producing call). Closes when a subsequent line has
+                    //   more `)` chars than `(` (excess close), handling the case where
+                    //   the matching `)` appears in the middle of a continuation line.
 
                     const isFunctionDecl   = /\bfunction[\s*]\s*[\w<>]*\s*\($/.test(stripped);
                     const opensParenScope  = /\($/.test(stripped) && !isFunctionDecl;
-                    const closesParenScope = /^\)/.test(stripped) && parenScopeDepth > 0;
 
                     const totalDepth = braceDepth + parenScopeDepth;
 
                     // Count leading closing tokens on this line (reduce depth BEFORE indent check).
+                    // Only count ) when a multi-line paren scope is actually open.
                     let preCloseCount = 0;
                     for (const ch of stripped) {
                         if (ch === '}' || ch === ']') {
                             preCloseCount++;
-                        } else if (ch === ')' && closesParenScope && preCloseCount === 0) {
+                        } else if (ch === ')' && parenScopeDepth > 0 && preCloseCount === 0) {
                             preCloseCount++;
                             break;
                         } else if (ch !== ' ') {
@@ -1421,14 +1419,22 @@
                         );
                     }
 
-                    // Update depth counters using the stripped line so that bracket
+                    // Update depth counters using the stripped line so that bracket/paren
                     // characters inside string literals don't affect future lines.
                     for (const char of stripped) {
                         if (char === '{' || char === '[') braceDepth++;
                         else if (char === '}' || char === ']') braceDepth = Math.max(0, braceDepth - 1);
                     }
-                    if (opensParenScope)  parenScopeDepth++;
-                    if (closesParenScope) parenScopeDepth = Math.max(0, parenScopeDepth - 1);
+                    if (opensParenScope) parenScopeDepth++;
+                    // Excess close: if this line has more ) than (, the excess closes
+                    // multi-line paren scopes (handles inline ) not at line start).
+                    let parenOpens = 0, parenCloses = 0;
+                    for (const ch of stripped) {
+                        if (ch === '(') parenOpens++;
+                        else if (ch === ')') parenCloses++;
+                    }
+                    const excessClose = Math.max(0, parenCloses - parenOpens);
+                    if (excessClose > 0) parenScopeDepth = Math.max(0, parenScopeDepth - excessClose);
                 }
             });
 
