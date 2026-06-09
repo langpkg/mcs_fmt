@@ -296,6 +296,10 @@
                 // Strategy: take lines[2..end], remove the author line and any bare "//"
                 // that sit immediately before or after it (they are separator noise),
                 // keeping all genuine descriptive comment lines.
+                // Detect lines that are author-like (invalid or duplicate "Made with ❤️" lines)
+                // so they are removed from user comments and replaced by the expected author.
+                const isAuthorLike = (line: string) => /^\/\/\s*Made with \u2764\ufe0f/.test(line);
+
                 let userComments: string[] = [];
                 if (headerLen > 2) {
                     const middle = rawBlock.slice(2); // after path + separator
@@ -303,28 +307,35 @@
                         // Author found - everything before it (excluding bare "//" right before author)
                         // plus everything after it (excluding bare "//" right after author if any)
                         const beforeAuthor = rawBlock.slice(2, authorIdxInBlock);
-                        const afterAuthor  = rawBlock
+                        let afterAuthor  = rawBlock
                         .slice(authorIdxInBlock + 1)
                         .filter((line) => line !== expectedAuthor); // drop duplicate author tail lines
 
-                        // Trim trailing bare "//" from beforeAuthor (separator before author)
-                        let bEnd = beforeAuthor.length;
-                        while (bEnd > 0 && beforeAuthor[bEnd - 1] === expectedSep) bEnd--;
+                        // Also drop author-like lines (invalid/duplicate "Made with" lines) and
+                        // any bare "//" adjacent to them from before/after
+                        const filteredBefore = beforeAuthor.filter((l) => !isAuthorLike(l));
+                        const filteredAfter  = afterAuthor.filter((l) => !isAuthorLike(l));
 
-                        // Trim leading bare "//" from afterAuthor (separator after author)
+                        // Trim trailing bare "//" from filteredBefore (separator before author)
+                        let bEnd = filteredBefore.length;
+                        while (bEnd > 0 && filteredBefore[bEnd - 1] === expectedSep) bEnd--;
+
+                        // Trim leading bare "//" from filteredAfter (separator after author)
                         let aStart = 0;
-                        while (aStart < afterAuthor.length && afterAuthor[aStart] === expectedSep) aStart++;
+                        while (aStart < filteredAfter.length && filteredAfter[aStart] === expectedSep) aStart++;
 
                         userComments = [
-                            ...beforeAuthor.slice(0, bEnd).map(normalizeCommentLine),
-                            ...afterAuthor.slice(aStart).map(normalizeCommentLine),
+                            ...filteredBefore.slice(0, bEnd).map(normalizeCommentLine),
+                            ...filteredAfter.slice(aStart).map(normalizeCommentLine),
                         ];
                     } else {
                         // No author in block yet - all middle lines are user comments
                         // (strip any bare "//" at the very end, those are trailing separators)
-                        let end = middle.length;
-                        while (end > 0 && middle[end - 1] === expectedSep) end--;
-                        userComments = middle.slice(0, end).map(normalizeCommentLine);
+                        // Also remove any author-like lines (invalid "Made with" lines)
+                        const filteredMiddle = middle.filter((l) => !isAuthorLike(l));
+                        let end = filteredMiddle.length;
+                        while (end > 0 && filteredMiddle[end - 1] === expectedSep) end--;
+                        userComments = filteredMiddle.slice(0, end).map(normalizeCommentLine);
                     }
                 }
 

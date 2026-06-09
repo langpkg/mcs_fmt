@@ -284,11 +284,11 @@
                 const typeSorted = [...typeSingle].sort((a, b) => specifierLen(b, bracePad) - specifierLen(a, bracePad));
 
                 const groups: ParsedEntry[][] = [];
+                for (const e of typeWrap)   groups.push([e]);  // each wrapped alone
+                if (typeSorted.length > 0)  groups.push(typeSorted);
                 for (const e of namedWrap) groups.push([e]);  // each wrapped alone
                 if (namedRel.length > 0)    groups.push(namedRel);
                 if (namedPkg.length > 0)    groups.push(namedPkg);
-                for (const e of typeWrap)   groups.push([e]);  // each wrapped alone
-                if (typeSorted.length > 0)  groups.push(typeSorted);
                 return groups;
             }
 
