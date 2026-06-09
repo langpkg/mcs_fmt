@@ -92,7 +92,7 @@
                 if (role === 'import') {
                     // import * as ns from 'x'
                     const starM = trimmed.match(
-                        /^import \* as (\S+)\s*from (['"][^'"]+['"])\s*;?$/
+                        /^import\s+\*\s+as\s+(\S+)\s+from\s+(['"][^'"]+['"])\s*;?$/
                     );
                     if (starM) return {
                         role: 'import', kind: 'star',
@@ -102,7 +102,7 @@
 
                     // import defaultName from 'x'
                     const defM = trimmed.match(
-                        /^import (\w+)\s*from (['"][^'"]+['"])\s*;?$/
+                        /^import\s+(\w+)\s+from\s+(['"][^'"]+['"])\s*;?$/
                     );
                     if (defM) return {
                         role: 'import', kind: 'star',
@@ -114,7 +114,7 @@
                 if (role === 'export') {
                     // export * from 'x'
                     const starExM = trimmed.match(
-                        /^export \*\s*from (['"][^'"]+['"])\s*;?$/
+                        /^export\s+\*\s*from\s+(['"][^'"]+['"])\s*;?$/
                     );
                     if (starExM) return {
                         role: 'export', kind: 'star',
@@ -125,7 +125,7 @@
 
                 // <role> type { a, b } from 'x'
                 const typeM = trimmed.match(
-                    new RegExp(`^${role} type \\{([^}]*)\\}\\s*from (['"][^'"]+['"])\\s*;?$`)
+                    new RegExp(`^${role}\\s+type\\s+\\{([^}]*)\\}\\s*from\\s+(['"][^'"]+['"])\\s*;?$`)
                 );
                 if (typeM) {
                     const names = typeM[1].split(',').map(n => n.trim()).filter(Boolean);
@@ -138,7 +138,7 @@
 
                 // <role> { a, b } from 'x'
                 const namedM = trimmed.match(
-                    new RegExp(`^${role} \\{([^}]*)\\}\\s*from (['"][^'"]+['"])\\s*;?$`)
+                    new RegExp(`^${role}\\s+\\{([^}]*)\\}\\s*from\\s+(['"][^'"]+['"])\\s*;?$`)
                 );
                 if (namedM) {
                     const names = namedM[1].split(',').map(n => n.trim()).filter(Boolean);
