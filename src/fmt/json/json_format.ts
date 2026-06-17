@@ -199,6 +199,28 @@
         ['skipDefaultLibCheck', 'skipLibCheck'],
     ];
 
+    // ── Exports conditions ordering (Node.js package.json exports) ─
+    // The root of "exports" should have the subpath key "." first.
+    const EXPORTS_ORDER                                   = ['.'];
+    const EXPORTS_GROUPS: string[][]                      = [['.']];
+
+    // Inside each subpath condition, "types" must come first so DTS resolution
+    // works before JS entry resolution.
+    const EXPORTS_CONDITIONS_ORDER                        = [
+        'types',
+        'import',
+        'require',
+        'default',
+        'browser',
+        'node',
+        'development',
+        'production',
+    ];
+    const EXPORTS_CONDITIONS_GROUPS: string[][]           = [
+        ['types', 'import', 'require', 'default', 'browser', 'node',
+            'development', 'production'],
+    ];
+
     // Sentinel: every JSON file gets at least open/close blank lines.
     // Pass GENERIC_GROUPS (empty array) for files with no specific template.
     const GENERIC_GROUPS: string[][]                      = [];
@@ -212,18 +234,31 @@
     interface NestedTemplate {
         order                                             : string[];
         groups                                            : string[][];
+        nested?                                           : Record<string, NestedTemplate>;
     }
 
     interface FileTemplate {
         order                                             : string[];
         groups                                            : string[][];
-        nested?      : Record<string, NestedTemplate>;
+        nested?                                           : Record<string, NestedTemplate>;
     }
 
     const FILE_TEMPLATES: Record<string, FileTemplate>    = {
         'package.json'                                    : {
             order                                         : PACKAGE_JSON_ORDER,
             groups                                        : PACKAGE_JSON_GROUPS,
+            nested                                        : {
+                exports                                   : {
+                    order                                 : EXPORTS_ORDER,
+                    groups                                : EXPORTS_GROUPS,
+                    nested                                : {
+                        '.'                               : {
+                            order                         : EXPORTS_CONDITIONS_ORDER,
+                            groups                        : EXPORTS_CONDITIONS_GROUPS,
+                        },
+                    },
+                },
+            },
         },
         'tsconfig.json'                                   : {
             order                                         : TSCONFIG_JSON_ORDER,
@@ -346,8 +381,8 @@
 
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 if (nested) {
-                    // Apply nested template's key order; nested templates don't recurse further
-                    result[key] = reorderObject(value, nested.order, null);
+                    // Apply nested template's key order, passing through deeper nesting if defined
+                    result[key] = reorderObject(value, nested.order, nested.nested ?? null);
                 } else {
                     // Sort nested object keys alphabetically (no template)
                     result[key] = reorderObject(value, null, null);
@@ -552,7 +587,7 @@
                         tabWidth,
                         globalMaxKeyLen,
                         nested?.groups ?? GENERIC_GROUPS,
-                        null,        // nested templates don't recurse further
+                        nested?.nested ?? null,
                         false,       // nested objects are never root
                     );
                 }

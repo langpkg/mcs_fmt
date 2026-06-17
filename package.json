@@ -1,7 +1,7 @@
 {
 
   "name"                        : "@langpkg/mcs_fmt",
-  "version"                     : "0.1.5",
+  "version"                     : "0.1.6",
   "description"                 : "Maysara Code Style Formatter for TypeScript",
   "keywords"                    : [],
   "license"                     : "MIT",
