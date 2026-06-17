@@ -307,7 +307,7 @@
                         // Author found - everything before it (excluding bare "//" right before author)
                         // plus everything after it (excluding bare "//" right after author if any)
                         const beforeAuthor = rawBlock.slice(2, authorIdxInBlock);
-                        let afterAuthor  = rawBlock
+                        const afterAuthor  = rawBlock
                         .slice(authorIdxInBlock + 1)
                         .filter((line) => line !== expectedAuthor); // drop duplicate author tail lines
 
@@ -637,6 +637,7 @@
             let parenScopeDepth = 0; // Track multi-line ( … ) scope depth separately
             const l2BraceDepthStack: number[] = []; const l2ParenDepthStack: number[] = []; // Saved depth values when entering L2 sections
             const l3BraceDepthStack: number[] = []; const l3ParenDepthStack: number[] = []; // Saved depth values when entering L3 sections
+            let hasAnyL1 = false; // Track whether at least one L1 section exists in the file
 
             const push = (
                 line            : number,
@@ -663,6 +664,7 @@
 
                 const m1o = RE_L1_OPEN.exec(raw);
                 if (m1o) {
+                    hasAnyL1 = true;
                     // Before opening a new L1, close any unclosed L2s and the previous L1
 
                     if (l2Stack.length > 0) {
@@ -769,6 +771,7 @@
 
                 // Detect malformed L1 open markers
                 if (RE_L1_OPEN_LENIENT.test(raw)) {
+                    hasAnyL1 = true;
                     const indent = raw.match(/^(\s*)/)?.[1] ?? '';
                     // Try to extract section name from malformed marker
                     // Look for a word surrounded by spaces (the proper format is " NAME ")
@@ -1844,6 +1847,18 @@
                 type: 'append_lines',
                 content: unc.indent + '// ' + makeL3Close(unc.title),
             });
+
+            // ── No L1 section ───────────────────────────────────────────
+            // Warn if file has code (not just whitespace & comments) but no L1 section markers.
+            if (!hasAnyL1) {
+                const hasCode = lines.some((ln) => {
+                    const trimmed = ln.trim();
+                    return trimmed.length > 0 && !trimmed.startsWith('//');
+                });
+                if (hasCode) {
+                    push(1, 'NO_L1_SECTION', 'File contains code but no L1 section markers', 'warning', false);
+                }
+            }
 
             // ── Trailing whitespace ─────────────────────────────────────
             lines.forEach((raw, idx) => {

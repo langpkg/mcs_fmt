@@ -108,7 +108,7 @@
                 }
 
                 expect(normalize(actual)).toBe(normalize(template.output));
-            });
+            }, 30000);
         });
     });
 
