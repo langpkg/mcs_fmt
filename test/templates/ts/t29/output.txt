@@ -1,0 +1,74 @@
+// ts/t29/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import { createRule, error as errorFn,
+             type Rules, rule, choice, token, seq,
+             zeroOrMore, Result, Parser,
+             type ParseError, ERRORS }    from '../../../utils/parser/src';
+
+    import { sp, mkC, getExpr }           from './_help';
+    import * as AST                       from '../../ast/src';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ RULE ════════════════════════════════════════╗
+
+    export const stmtRules: Rules = [
+
+        // {...}
+        createRule('BaseContainer',
+            rule('Stmts'),
+            {
+                build: (data: Result) => {
+                    const stmts  = data.getCustomData() as AST.Stmt[] | undefined;
+                    const span  = sp(data);
+                    // create the base container
+                    return Result.createAsCustom('passed', 'BaseContainer', {
+                        kind        : 'base-container',
+                        statements  : stmts,
+                        span,
+                    }, span);
+                },
+
+                errors: [errorFn(() => true, 'Expected BaseContainer')],
+            }
+        ),
+
+        // tag {...}, e.g. `struct {..}`, `enum {..}`, `interface {..}`, `class {..}` and `Tag<..> {..}`
+        createRule('TaggedContainer',
+            seq(
+                token('ident'),
+                token('{'),
+                rule('Stmts'),
+                token('}'),
+            ),
+            {
+                build: (data: Result) => {
+                    // validate the data
+                    const tagToken = data.getSequenceResult()?.[0]?.getTokenData();
+                    const tagName  = tagToken?.value ?? '';
+                    const stmts    = data.getSequenceResult()?.[2]?.getCustomData() as AST.Stmt[] | undefined;
+                    const span     = sp(data);
+                    // create the tagged container
+                    return Result.createAsCustom('passed', 'TaggedContainer', {
+                        kind        : 'tagged-container',
+                        tag         : tagName,
+                        statements  : stmts,
+                        span,
+                    }, span);
+                },
+
+                errors: [errorFn(() => true, 'Expected TaggedContainer')],
+            }
+        ),
+
+    ];
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

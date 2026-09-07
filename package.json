@@ -1,7 +1,7 @@
 {
 
   "name"                        : "@langpkg/mcs_fmt",
-  "version"                     : "0.1.8",
+  "version"                     : "0.1.9",
   "description"                 : "Maysara Code Style Formatter for TypeScript",
   "keywords"                    : [],
   "license"                     : "MIT",
@@ -18,9 +18,9 @@
   "files"                       : ["dist"],
   "exports"                     : {
     "."                         : {
+      "types"                   : "./dist/index.d.ts",
       "import"                  : "./dist/index.js",
-      "require"                 : "./dist/index.cjs",
-      "types"                   : "./dist/index.d.ts"
+      "require"                 : "./dist/index.cjs"
     }
   },
   "module"                      : "./dist/index.js",

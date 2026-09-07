@@ -562,7 +562,7 @@
             return /^[a-z0-9_]+(\.[a-z0-9]+)?$/.test(name);
         }
 
-        // Check file and folder naming conventions (snake_case)
+        // Check TypeScript file naming conventions (snake_case); folder names are unrestricted.
         export function checkNaming(dir: string): FormatIssue[] {
             const issues: FormatIssue[] = [];
 
@@ -586,22 +586,6 @@
                         });
                     }
 
-                    // Check folder names in the path
-                    const pathParts = filepath.split(/[\\/]/);
-                    for (let i = pathParts.indexOf(dir) + 1; i < pathParts.length - 1; i++) {
-                        const folder = pathParts[i];
-                        if (folder && !isValidSnakeCase(folder)) {
-                            issues.push({
-                                file            : filepath,
-                                line            : 1,
-                                code            : 'FOLDER_NAME_INVALID',
-                                message         : `Folder name "${folder}" must follow snake_case convention (e.g., my_folder/)`,
-                                severity        : 'warning',
-                                fixable         : false,
-                            });
-                            break; // Only report once per file
-                        }
-                    }
                 }
             } catch {
                 // Silently ignore glob errors
@@ -635,6 +619,8 @@
             }[] = [];
             let braceDepth = 0; // Track { [ } ] nesting depth for current section
             let parenScopeDepth = 0; // Track multi-line ( … ) scope depth separately
+            let inlineParenDepth = 0; // Track non-indenting calls spanning multiple lines
+            let nestedRuleScopeDepth = 0;
             const l2BraceDepthStack: number[] = []; const l2ParenDepthStack: number[] = []; // Saved depth values when entering L2 sections
             const l3BraceDepthStack: number[] = []; const l3ParenDepthStack: number[] = []; // Saved depth values when entering L3 sections
             let hasAnyL1 = false; // Track whether at least one L1 section exists in the file
@@ -765,7 +751,7 @@
                     }
 
                     l1Stack.push({ lineno, name, indent, indentNum });
-                    braceDepth = 0; parenScopeDepth = 0; // Reset depth for new section
+                    braceDepth = 0; parenScopeDepth = 0; inlineParenDepth = 0; nestedRuleScopeDepth = 0; // Reset depth for new section
                     return;
                 }
 
@@ -804,7 +790,7 @@
 
                     // Push to stack so matching close marker can be found
                     l1Stack.push({ lineno, name: sectionName, indent, indentNum });
-                    braceDepth = 0; parenScopeDepth = 0;
+                    braceDepth = 0; parenScopeDepth = 0; inlineParenDepth = 0; nestedRuleScopeDepth = 0;
                     return;
                 }
 
@@ -875,7 +861,7 @@
                                 content: indent + '// ' + correct,
                             }
                         );
-                        braceDepth = 0; parenScopeDepth = 0; // Reset depth when closing section
+                        braceDepth = 0; parenScopeDepth = 0; inlineParenDepth = 0; nestedRuleScopeDepth = 0; // Reset depth when closing section
                     }
                     return;
                 }
@@ -900,7 +886,7 @@
                     // Pop from stack if there's a matching open
                     if (l1Stack.length > 0) {
                         l1Stack.pop();
-                        braceDepth = 0; parenScopeDepth = 0;
+                        braceDepth = 0; parenScopeDepth = 0; inlineParenDepth = 0; nestedRuleScopeDepth = 0;
                     }
                     return;
                 }
@@ -1396,7 +1382,13 @@
                     //   the matching `)` appears in the middle of a continuation line.
 
                     const isFunctionDecl   = /\bfunction[\s*]\s*[\w<>]*\s*\($/.test(stripped);
-                    const opensParenScope  = /\($/.test(stripped) && !isFunctionDecl;
+                    const parenOpens       = (stripped.match(/\(/g) || []).length;
+                    const parenCloses      = (stripped.match(/\)/g) || []).length;
+                    const nextMeaningful   = lines.slice(idx + 1).find((line) => line.trim().length > 0)?.trim() ?? '';
+                    const opensNestedRule  = parenOpens > parenCloses
+                    && /^createRule\s*\(/.test(stripped)
+                    && /^(rule|seq)\s*\(/.test(nextMeaningful);
+                    const opensParenScope  = (/\($/.test(stripped) || opensNestedRule) && !isFunctionDecl;
 
                     const totalDepth = braceDepth + parenScopeDepth;
 
@@ -1406,7 +1398,7 @@
                     for (const ch of stripped) {
                         if (ch === '}' || ch === ']') {
                             preCloseCount++;
-                        } else if (ch === ')' && parenScopeDepth > 0 && preCloseCount === 0) {
+                        } else if (ch === ')' && parenScopeDepth > 0 && inlineParenDepth === 0 && preCloseCount === 0) {
                             preCloseCount++;
                             break;
                         } else if (ch !== ' ') {
@@ -1440,15 +1432,20 @@
                         else if (char === '}' || char === ']') braceDepth = Math.max(0, braceDepth - 1);
                     }
                     if (opensParenScope) parenScopeDepth++;
+                    if (opensNestedRule) nestedRuleScopeDepth++;
+                    if (nestedRuleScopeDepth > 0) {
+                        inlineParenDepth += Math.max(0, parenOpens - parenCloses - (opensParenScope ? 1 : 0));
+                    }
                     // Excess close: if this line has more ) than (, the excess closes
                     // multi-line paren scopes (handles inline ) not at line start).
-                    let parenOpens = 0, parenCloses = 0;
-                    for (const ch of stripped) {
-                        if (ch === '(') parenOpens++;
-                        else if (ch === ')') parenCloses++;
-                    }
                     const excessClose = Math.max(0, parenCloses - parenOpens);
-                    if (excessClose > 0) parenScopeDepth = Math.max(0, parenScopeDepth - excessClose);
+                    if (excessClose > 0) {
+                        const inlineClosed = Math.min(inlineParenDepth, excessClose);
+                        inlineParenDepth -= inlineClosed;
+                        const scopeClosed = excessClose - inlineClosed;
+                        parenScopeDepth = Math.max(0, parenScopeDepth - scopeClosed);
+                        nestedRuleScopeDepth = Math.min(nestedRuleScopeDepth, parenScopeDepth);
+                    }
                 }
             });
 
