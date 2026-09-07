@@ -1385,10 +1385,11 @@
                     const parenOpens       = (stripped.match(/\(/g) || []).length;
                     const parenCloses      = (stripped.match(/\)/g) || []).length;
                     const nextMeaningful   = lines.slice(idx + 1).find((line) => line.trim().length > 0)?.trim() ?? '';
-                    const opensNestedRule  = parenOpens > parenCloses
-                    && /^createRule\s*\(/.test(stripped)
-                    && /^(rule|seq)\s*\(/.test(nextMeaningful);
-                    const opensParenScope  = (/\($/.test(stripped) || opensNestedRule) && !isFunctionDecl;
+                    const opensNestedRule  = /^createRule\s*\(/.test(stripped)
+                    && /^(rule|seq|choice)\s*\(/.test(nextMeaningful);
+                    const opensCreateRuleContinuation = /^createRule\s*\(/.test(stripped)
+                    && /^(choice|token)\s*\(/.test(nextMeaningful);
+                    const opensParenScope  = (/\($/.test(stripped) || opensNestedRule || opensCreateRuleContinuation) && !isFunctionDecl;
 
                     const totalDepth = braceDepth + parenScopeDepth;
 

@@ -1,0 +1,39 @@
+// ts/t30/input.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ RULE ════════════════════════════════════════╗
+
+    export const exprRules: Rules = [
+
+        // ── Expr (top-level) ────────────────────────────────────────
+
+        createRule('Expr',
+        choice(
+            rule('DummyExprNode'),
+        ),
+        {
+            build: (data: Result) => {
+                const ch = data.getChoiceResult();
+                return ch ?? data;
+            },
+            errors: [errorFn(() => true, 'Expected expression')],
+        }
+        ),
+
+        createRule('DummyExprNode',
+        token('dummy_expr'),
+        {
+            build: (data: Result) => {
+                const span = sp(data);
+                return mkC(data, 'expr', AST.ExprNodes.dummyExpr(span));
+            },
+            errors: [],
+        }
+        ),
+
+    ];
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
