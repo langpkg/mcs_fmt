@@ -1,0 +1,111 @@
+// ts/t33/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ PACK ════════════════════════════════════════╗
+
+    import type { ResultError }                       from '../../utils/parser/result';
+    import type { Token }                             from '../../utils/lexer';
+
+    import      { createRule, error as errorFn,
+                  type Rules, type Pattern, rule, choice,
+                  token, seq, optional, zeroOrMore,
+                  Result }                            from '../../utils/parser';
+
+    import      { sp, mkC, mkE, getExpr, getType }    from './_help';
+    import * as AST                                   from '../ast';
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ RULE ════════════════════════════════════════╗
+
+    export const binaryRules: Rules = [
+
+        binaryRule('LogicalOrExpr',     'LogicalAndExpr',   ['or', '||']),
+        binaryRule('LogicalAndExpr',    'CompareExpr',      ['and', '&&']),
+        binaryRule('CompareExpr',       'BitwiseExpr',      ['==', '!=', '<=', '>=', '<', '>']),
+        binaryRule('BitwiseExpr',       'ShiftExpr',        ['&', '|', '^']),
+        binaryRule('ShiftExpr',         'AddExpr',          ['<<', '>>', '<<|']),
+        binaryRule('AddExpr',           'MultiplyExpr',     ['+', '-', '+|', '-|', '+%', '-%', '+?', '-?', '++']),
+        binaryRule('MultiplyExpr',      'PrefixExpr',       ['*', '/', '%', '*|', '*%', '*?', '**', '||']),
+
+    ];
+
+    export const exprRules: Rules = [
+
+        // main
+        createRule('Expr',
+            rule('AssignmentExpr'),
+            {
+                build: (r: Result) => {
+                    // generate
+                    return r;
+                },
+
+                errors: [errorFn(() => true, 'Expected expression')],
+            }
+        ),
+
+        // top
+        binaryRule('AssignmentExpr', 'LogicalOrExpr', [
+            '=',
+            '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=',
+            '+|=', '-|=', '*|=',
+            '+%=', '-%=', '*%=',
+            '<<=', '>>=', '**='
+        ]),
+
+        // binary
+        ...binaryRules,
+
+        // prefix
+        ...prefixRules,
+
+        // postfix
+        ...postfixRules,
+
+        // prim
+        ...primaryRules,
+
+        ...helpers
+
+    ];
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+// ╔════════════════════════════════════════ HELP ════════════════════════════════════════╗
+
+    function binaryRule(name: string, next: string, operators: string[]) {
+        return createRule(name,
+            seq(
+                rule(next),
+                zeroOrMore(seq(choice(...operators.map(operator => operator === '*' ? token('*', '*') : token(operator))), rule(next))),
+            ),
+            {
+                build: (r: Result) => {
+                    const parts = r.getSequenceResult()!;
+                    let result = getExpr(parts[0]);
+                    for (const item of parts[1].getRepeatResult() ?? []) {
+                        const pair = item.getSequenceResult()!;
+                        const operator = pair[0].getChoiceResult()?.getTokenData()?.text ?? '';
+                        const right = getExpr(pair[1]);
+                        result = AST.make.expr.binary(
+                            { start: result.span.start, end: right.span.end },
+                            result,
+                            operator,
+                            right,
+                        );
+                    }
+                    return mkC(name, result, r);
+                },
+            },
+        );
+    }
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝

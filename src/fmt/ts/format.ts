@@ -1388,9 +1388,9 @@
                     const parenOpens       = (stripped.match(/\(/g) || []).length;
                     const parenCloses      = (stripped.match(/\)/g) || []).length;
                     const nextMeaningful   = lines.slice(idx + 1).find((line) => line.trim().length > 0)?.trim() ?? '';
-                    const opensNestedRule  = /^createRule\s*\(/.test(stripped)
+                    const opensNestedRule  = /createRule\s*\(/.test(stripped)
                     && /^(rule|seq|choice|conditional)\s*\(/.test(nextMeaningful);
-                    const opensCreateRuleContinuation = /^createRule\s*\(/.test(stripped)
+                    const opensCreateRuleContinuation = /createRule\s*\(/.test(stripped)
                     && /^(choice|token|conditional)\s*\(/.test(nextMeaningful);
                     const keepCallScopeForObject = /conditional\s*\(.*\)\s*,\s*$/.test(stripped) && nextMeaningful.startsWith('{');
                     const closesNestedCreateRule = /^\)\s*,.*\)\s*,\s*$/.test(stripped);
