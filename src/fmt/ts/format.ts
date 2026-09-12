@@ -622,6 +622,7 @@
             let inlineParenDepth = 0; // Track non-indenting calls spanning multiple lines
             let nestedRuleScopeDepth = 0;
             let ternaryBranchDepth = 0; // Track multi-line ternary ?/: extra indent
+            let caseBodyDepth = 0; // Track case/default body extra indent
             const l2BraceDepthStack: number[] = []; const l2ParenDepthStack: number[] = []; // Saved depth values when entering L2 sections
             const l3BraceDepthStack: number[] = []; const l3ParenDepthStack: number[] = []; // Saved depth values when entering L3 sections
             let hasAnyL1 = false; // Track whether at least one L1 section exists in the file
@@ -1426,6 +1427,31 @@
                         ternaryDepth = 1;
                     }
 
+                    // Detect case/default body: lines after case/default get extra indent
+                    // until next case/default or closing brace
+                    // Skip if case line ends with { (brace depth handles indent)
+                    const isCaseOrDefault = /^\s*(case\s+.+|default)\s*:/ .test(raw);
+                    const caseEndsWithBrace = /\{\s*$/.test(stripped);
+                    let caseBodyIndent = 0;
+                    if (isCaseOrDefault && !caseEndsWithBrace) {
+                        // Check if next meaningful line is another case/default or closing brace
+                        const nextTrimmed = nextMeaningful;
+                        const isNextCaseOrClose = /^\s*(case\s+.+|default)\s*:/.test(nextTrimmed)
+                            || /^\s*[})\]]/.test(nextTrimmed);
+                        if (!isNextCaseOrClose && nextTrimmed.length > 0) {
+                            caseBodyDepth = 1;
+                        } else {
+                            caseBodyDepth = 0;
+                        }
+                    } else if (caseBodyDepth > 0) {
+                        // Check if we hit a closing brace or another case/default
+                        if (/^\s*[})\]]/.test(raw) || isCaseOrDefault) {
+                            caseBodyDepth = 0;
+                        } else {
+                            caseBodyIndent = 1;
+                        }
+                    }
+
                     const totalDepth = braceDepth + parenScopeDepth;
 
                     // Count leading closing tokens on this line (reduce depth BEFORE indent check).
@@ -1442,7 +1468,7 @@
                         }
                     }
                     const depthForIndent = Math.max(0, totalDepth - preCloseCount - (closesNestedCreateRule ? 1 : 0));
-                    const requiredIndent = targetSection.indentNum + 4 + (depthForIndent + ternaryDepth) * 4;
+                    const requiredIndent = targetSection.indentNum + 4 + (depthForIndent + ternaryDepth + caseBodyIndent) * 4;
 
                     // Enforce exact indentation within sections
                     if (lineIndent !== requiredIndent) {

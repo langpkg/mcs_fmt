@@ -1,0 +1,91 @@
+// ts/t32/output.ts
+//
+// Made with ❤️ by Maysara.
+
+
+
+// ╔════════════════════════════════════════ RULE ════════════════════════════════════════╗
+
+    export const stmtRules: Rules = [
+
+        createRule('LiteralExpr',
+            choice(
+                token('dec'),
+                token('bin'),
+                token('oct'),
+                token('hex'),
+                token('flt'),
+                token('true'),
+                token('false'),
+                token('str'),
+                token('multiline_str'),
+                token('char'),
+                token('null'),
+                token('undefined'),
+                rule('ident'),
+            ),
+            {
+                build: (r: Result) => {
+                    const selected = r.getChoiceResult()!;
+                    let expr: AST.Expr | null = null;
+
+                    if (selected.isCustom('ident')) {
+                        expr = getExpr(selected);
+                    } else if (selected.isToken()) {
+                        const parsedToken = selected.getTokenData()!;
+                        const kind = parsedToken.type;
+                        const value = parsedToken.text;
+
+                        switch (kind) {
+                            case 'dec':
+                            case 'bin':
+                            case 'oct':
+                            case 'hex': {
+                                const err = validateIntLit(parsedToken);
+                                if (err) return r.withError(err);
+                                expr = AST.ExprNodes.intLit(parsedToken.span, BigInt(value.split('_').join('')), value);
+                                break;
+                            }
+                            case 'flt': {
+                                const err = validateFltLit(parsedToken);
+                                if (err) return r.withError(err);
+                                expr = AST.ExprNodes.floatLit(parsedToken.span, parseFloatLiteral(value), value);
+                                break;
+                            }
+                            case 'true':
+                            case 'false':
+                                expr = AST.ExprNodes.boolLit(parsedToken.span, value === 'true');
+                                break;
+                            case 'str':
+                            case 'multiline_str':
+                                expr = AST.ExprNodes.stringLit(parsedToken.span, value ?? '');
+                                break;
+                            case 'char': {
+                                const err = validateCharLit(parsedToken);
+                                if (err) return r.withError(err);
+                                expr = AST.ExprNodes.charLit(parsedToken.span, value ?? '');
+                                break;
+                            }
+                            case 'null':
+                                expr = AST.ExprNodes.nullLit(parsedToken.span);
+                                break;
+                            case 'undefined':
+                                expr = AST.ExprNodes.undefinedLit(parsedToken.span);
+                                break;
+                            default:
+                                throw new Error(`Unknown literal kind: ${kind}`);
+                            default: {
+                                throw new Error(`Unknown literal kind: ${kind}`);
+                            }
+                        }
+                    }
+
+                    return mkC(r, 'literal-expr', expr!);
+                },
+                errors: [errorFn(0, 'Expected literal expression')],
+            }
+        ),
+
+    ];
+
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
