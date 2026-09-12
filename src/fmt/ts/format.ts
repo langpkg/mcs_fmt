@@ -621,6 +621,7 @@
             let parenScopeDepth = 0; // Track multi-line ( … ) scope depth separately
             let inlineParenDepth = 0; // Track non-indenting calls spanning multiple lines
             let nestedRuleScopeDepth = 0;
+            let ternaryBranchDepth = 0; // Track multi-line ternary ?/: extra indent
             const l2BraceDepthStack: number[] = []; const l2ParenDepthStack: number[] = []; // Saved depth values when entering L2 sections
             const l3BraceDepthStack: number[] = []; const l3ParenDepthStack: number[] = []; // Saved depth values when entering L3 sections
             let hasAnyL1 = false; // Track whether at least one L1 section exists in the file
@@ -1380,6 +1381,7 @@
                     //   with `(` (value-producing call). Closes when a subsequent line has
                     //   more `)` chars than `(` (excess close), handling the case where
                     //   the matching `)` appears in the middle of a continuation line.
+                    // ternaryDepth    - extra indent for multi-line ternary ?/: lines.
 
                     const isFunctionDecl   = /\bfunction[\s*]\s*[\w<>]*\s*\($/.test(stripped);
                     const parenOpens       = (stripped.match(/\(/g) || []).length;
@@ -1392,6 +1394,37 @@
                     const keepCallScopeForObject = /conditional\s*\(.*\)\s*,\s*$/.test(stripped) && nextMeaningful.startsWith('{');
                     const closesNestedCreateRule = /^\)\s*,.*\)\s*,\s*$/.test(stripped);
                     const opensParenScope  = (/\($/.test(stripped) || opensNestedRule || opensCreateRuleContinuation || keepCallScopeForObject) && !isFunctionDecl;
+
+                    // Detect multi-line ternary: current line starts with ? or :
+                    // Uses state variable to track ? → : progression
+                    const startsWithQuestion = /^\s*\?\s/.test(raw) || /^\s*\?$/.test(raw);
+                    const startsWithColon = /^\s*:\s/.test(raw) || /^\s*:$/.test(raw);
+                    let ternaryDepth = 0;
+                    if (startsWithQuestion && idx > 0) {
+                        // Check if previous line ends with a value (ternary condition)
+                        for (let pi = idx - 1; pi >= 0; pi--) {
+                            const prevTrimmed = lines[pi].trim();
+                            if (prevTrimmed.length === 0) continue;
+                            const prevStripped = stripStringsAndComments(prevTrimmed);
+                            if (/[a-zA-Z0-9_\)]\s*$/.test(prevStripped)
+                                && !prevStripped.endsWith('?')
+                                && !prevStripped.endsWith(':')) {
+                                ternaryDepth = 1;
+                                // Only set state for multi-line ternaries (? and : on separate lines)
+                                const hasColonOnSameLine = /\?:|\?\s.*:/.test(stripped);
+                                if (!hasColonOnSameLine) {
+                                    ternaryBranchDepth = 1;
+                                }
+                            }
+                            break;
+                        }
+                    } else if (startsWithColon && ternaryBranchDepth > 0) {
+                        ternaryDepth = 1;
+                        ternaryBranchDepth = 0;
+                    } else if (ternaryBranchDepth > 0) {
+                        // All lines between ? and : get the extra ternary indent
+                        ternaryDepth = 1;
+                    }
 
                     const totalDepth = braceDepth + parenScopeDepth;
 
@@ -1409,7 +1442,7 @@
                         }
                     }
                     const depthForIndent = Math.max(0, totalDepth - preCloseCount - (closesNestedCreateRule ? 1 : 0));
-                    const requiredIndent = targetSection.indentNum + 4 + depthForIndent * 4;
+                    const requiredIndent = targetSection.indentNum + 4 + (depthForIndent + ternaryDepth) * 4;
 
                     // Enforce exact indentation within sections
                     if (lineIndent !== requiredIndent) {

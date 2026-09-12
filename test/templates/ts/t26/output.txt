@@ -118,7 +118,7 @@
                         parseArgList(p, args, ')');
                     }
                     const span = merge(tok.span, args.length
-                    ? (args[args.length - 1] as any).span : nameTok.span);
+                        ? (args[args.length - 1] as any).span : nameTok.span);
                     return exprR(Node.builtinCall(span, nameTok.text!, args), span);
                 },
             },
@@ -405,7 +405,7 @@
                         const args: Expr[] = [];
                         parseArgList(p, args, ')');
                         const span = merge(l.span, args.length
-                        ? (args[args.length - 1] as any).span : prop.span);
+                            ? (args[args.length - 1] as any).span : prop.span);
                         return exprR(Node.methodCall(span, getExpr(l),
                         Node.ident(prop.span, prop.text!), args, false), span);
                     }
@@ -425,7 +425,7 @@
                         const args: Expr[] = [];
                         parseArgList(p, args, ')');
                         const span = merge(l.span, args.length
-                        ? (args[args.length - 1] as any).span : prop.span);
+                            ? (args[args.length - 1] as any).span : prop.span);
                         return exprR(Node.methodCall(span, getExpr(l),
                         Node.ident(prop.span, prop.text!), args, true), span);
                     }
@@ -479,7 +479,7 @@
                     const args: Expr[] = [];
                     parseArgList(p, args, ')');
                     const span = merge(l.span, args.length
-                    ? (args[args.length - 1] as any).span : tok.span);
+                        ? (args[args.length - 1] as any).span : tok.span);
                     return exprR(Node.call(span, getExpr(l), args), span);
             }},
 
@@ -624,8 +624,8 @@
         {
             build: (data) => {
                 const inner = data.isPratt()
-                ? data.getPrattResult()?.[0]
-                : data.getCustomData();
+                    ? data.getPrattResult()?.[0]
+                    : data.getCustomData();
                 return mkCustom(data, 'expr', inner ?? data);
             },
             errors: [error(() => true, 'Expected expression')],

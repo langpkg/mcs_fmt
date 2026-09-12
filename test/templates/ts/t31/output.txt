@@ -24,12 +24,12 @@
                     // extract
                     const parts = r.getSequenceResult()!;
                     const visibility = parts[0].isOptionalPassed()
-                    ? parts[0].getOptionalResult()!.getCustomData() as AST.VisibilityModifier
-                    : null;
+                        ? parts[0].getOptionalResult()!.getCustomData() as AST.VisibilityModifier
+                        : null;
                     const name = parts[3].getTokenData()!.text;
                     const type = parts[4].isOptionalPassed()
-                    ? getType(parts[4].getOptionalResult()!)
-                    : null;
+                        ? getType(parts[4].getOptionalResult()!)
+                        : null;
                     const value = getExpr(parts[6]);
 
                     if (!parts[7].isOptionalPassed()) {
@@ -61,29 +61,29 @@
                 build: (r: Result) => {
                     // extract
                     const sequence = r.isCustom('conditional')
-                    ? r.getCustomData() as Result
-                    : r;
+                        ? r.getCustomData() as Result
+                        : r;
                     const parts = sequence.getSequenceResult()!;
                     const visibility = parts[0].isOptionalPassed()
-                    ? parts[0].getOptionalResult()!.getCustomData() as AST.VisibilityModifier
-                    : null;
+                        ? parts[0].getOptionalResult()!.getCustomData() as AST.VisibilityModifier
+                        : null;
                     const extern: AST.ExternModifier | null = parts[1].isOptionalPassed()
-                    ? {
-                        kind: 'ExternModifier',
-                        span: parts[1].getOptionalResult()!.span,
-                        mode: 'extern',
-                    }
-                    : null;
+                        ? {
+                            kind: 'ExternModifier',
+                            span: parts[1].getOptionalResult()!.span,
+                            mode: 'extern',
+                        }
+                        : null;
                     const params = parts[5].isOptionalPassed()
-                    ? (parts[5].getOptionalResult()!.getRepeatResult() ?? []).map(result =>
-                    result.getSequenceResult()![0].getCustomData() as AST.Param)
-                    : [];
+                        ? (parts[5].getOptionalResult()!.getRepeatResult() ?? []).map(result =>
+                        result.getSequenceResult()![0].getCustomData() as AST.Param)
+                        : [];
                     const returnType = parts[7].isOptionalPassed()
-                    ? getType(parts[7].getOptionalResult()!)
-                    : null;
+                        ? getType(parts[7].getOptionalResult()!)
+                        : null;
                     const body = parts[8].isOptionalPassed()
-                    ? parts[8].getOptionalResult()!.getCustomData() as AST.BlockStmt
-                    : null;
+                        ? parts[8].getOptionalResult()!.getCustomData() as AST.BlockStmt
+                        : null;
                     const hasTerminator = parts[9].isOptionalPassed();
 
                     if (extern && body) {

@@ -68,8 +68,8 @@
 
                         const targetPath = resolve(
                             isAbsolute(this.params.args.path || '.')
-                            ? this.params.args.path || '.'
-                            : this.params.args.path || '.'
+                                ? this.params.args.path || '.'
+                                : this.params.args.path || '.'
                         );
 
                         if (!isFileExists(targetPath) && !isDirExists(targetPath)) {
