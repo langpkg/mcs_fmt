@@ -1386,10 +1386,12 @@
                     const parenCloses      = (stripped.match(/\)/g) || []).length;
                     const nextMeaningful   = lines.slice(idx + 1).find((line) => line.trim().length > 0)?.trim() ?? '';
                     const opensNestedRule  = /^createRule\s*\(/.test(stripped)
-                    && /^(rule|seq|choice)\s*\(/.test(nextMeaningful);
+                    && /^(rule|seq|choice|conditional)\s*\(/.test(nextMeaningful);
                     const opensCreateRuleContinuation = /^createRule\s*\(/.test(stripped)
-                    && /^(choice|token)\s*\(/.test(nextMeaningful);
-                    const opensParenScope  = (/\($/.test(stripped) || opensNestedRule || opensCreateRuleContinuation) && !isFunctionDecl;
+                    && /^(choice|token|conditional)\s*\(/.test(nextMeaningful);
+                    const keepCallScopeForObject = /conditional\s*\(.*\)\s*,\s*$/.test(stripped) && nextMeaningful.startsWith('{');
+                    const closesNestedCreateRule = /^\)\s*,.*\)\s*,\s*$/.test(stripped);
+                    const opensParenScope  = (/\($/.test(stripped) || opensNestedRule || opensCreateRuleContinuation || keepCallScopeForObject) && !isFunctionDecl;
 
                     const totalDepth = braceDepth + parenScopeDepth;
 
@@ -1406,7 +1408,7 @@
                             break;
                         }
                     }
-                    const depthForIndent = Math.max(0, totalDepth - preCloseCount);
+                    const depthForIndent = Math.max(0, totalDepth - preCloseCount - (closesNestedCreateRule ? 1 : 0));
                     const requiredIndent = targetSection.indentNum + 4 + depthForIndent * 4;
 
                     // Enforce exact indentation within sections
@@ -1443,7 +1445,10 @@
                     if (excessClose > 0) {
                         const inlineClosed = Math.min(inlineParenDepth, excessClose);
                         inlineParenDepth -= inlineClosed;
-                        const scopeClosed = excessClose - inlineClosed;
+                        let scopeClosed = excessClose - inlineClosed;
+                        if (keepCallScopeForObject && scopeClosed > 0) {
+                            scopeClosed = Math.max(0, scopeClosed - 1);
+                        }
                         parenScopeDepth = Math.max(0, parenScopeDepth - scopeClosed);
                         nestedRuleScopeDepth = Math.min(nestedRuleScopeDepth, parenScopeDepth);
                     }
